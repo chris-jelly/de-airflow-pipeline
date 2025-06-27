@@ -1,0 +1,7 @@
+[tools]
+pre-commit = "latest"
+python = "latest"
+uv = "latest"
+
+[hooks]
+enter = "bash ./scripts/setup_project"
