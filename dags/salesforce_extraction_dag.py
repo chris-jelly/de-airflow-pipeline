@@ -4,9 +4,17 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.salesforce.hooks.salesforce import SalesforceHook
+from airflow.models import Variable
 import pandas as pd
 import json
 import os
+
+# Get environment (you can set this as an Airflow Variable)
+env = Variable.get("environment", default_var="dev")  # or "prod"
+
+# Use environment-specific connections
+postgres_conn_id = f"warehouse_postgres_{env}"
+salesforce_conn_id = f"salesforce_{env}"
 
 default_args = {
     'owner': 'data-team',
@@ -30,19 +38,31 @@ dag = DAG(
 def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
     """Extract Salesforce object data directly to PostgreSQL."""
     
-    # Get hooks using environment variables
+    # Access environment-specific variables
+    postgres_host = os.getenv(f"POSTGRES_HOST_{env.upper()}")
+    postgres_database = os.getenv(f"POSTGRES_DATABASE_{env.upper()}")
+    postgres_user = os.getenv(f"POSTGRES_USER_{env.upper()}")
+    postgres_password = os.getenv(f"POSTGRES_PASSWORD_{env.upper()}")
+    postgres_port = int(os.getenv(f"POSTGRES_PORT_{env.upper()}", '5432'))
+    
+    salesforce_username = os.getenv(f"SALESFORCE_USERNAME_{env.upper()}")
+    salesforce_password = os.getenv(f"SALESFORCE_PASSWORD_{env.upper()}")
+    salesforce_security_token = os.getenv(f"SALESFORCE_SECURITY_TOKEN_{env.upper()}")
+    salesforce_domain = os.getenv(f"SALESFORCE_DOMAIN_{env.upper()}", 'login')
+    
+    # Get hooks using environment-specific variables
     sf_hook = SalesforceHook(
-        username=os.getenv('SALESFORCE_USERNAME'),
-        password=os.getenv('SALESFORCE_PASSWORD'),
-        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN'),
-        domain=os.getenv('SALESFORCE_DOMAIN', 'login')
+        username=salesforce_username,
+        password=salesforce_password,
+        security_token=salesforce_security_token,
+        domain=salesforce_domain
     )
     pg_hook = PostgresHook(
-        host=os.getenv('POSTGRES_HOST'),
-        database=os.getenv('POSTGRES_DATABASE'),
-        login=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD'),
-        port=int(os.getenv('POSTGRES_PORT', '5432'))
+        host=postgres_host,
+        database=postgres_database,
+        login=postgres_user,
+        password=postgres_password,
+        port=postgres_port
     )
     
     # Query Salesforce
@@ -108,12 +128,19 @@ def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
 
 # Create bronze schema
 def create_bronze_schema():
+    # Access environment-specific variables
+    postgres_host = os.getenv(f"POSTGRES_HOST_{env.upper()}")
+    postgres_database = os.getenv(f"POSTGRES_DATABASE_{env.upper()}")
+    postgres_user = os.getenv(f"POSTGRES_USER_{env.upper()}")
+    postgres_password = os.getenv(f"POSTGRES_PASSWORD_{env.upper()}")
+    postgres_port = int(os.getenv(f"POSTGRES_PORT_{env.upper()}", '5432'))
+    
     pg_hook = PostgresHook(
-        host=os.getenv('POSTGRES_HOST'),
-        database=os.getenv('POSTGRES_DATABASE'),
-        login=os.getenv('POSTGRES_USER'),
-        password=os.getenv('POSTGRES_PASSWORD'),
-        port=int(os.getenv('POSTGRES_PORT', '5432'))
+        host=postgres_host,
+        database=postgres_database,
+        login=postgres_user,
+        password=postgres_password,
+        port=postgres_port
     )
     pg_hook.run("CREATE SCHEMA IF NOT EXISTS bronze;")
 
