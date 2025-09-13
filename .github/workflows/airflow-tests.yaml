@@ -48,8 +48,8 @@ jobs:
 
       - name: Lint with Ruff
         run: |
-          uv run ruff check --output-format=github --target-version=py39 dags de_airflow_pipeline tests
-          uv run ruff format --diff --check --target-version=py39 dags de_airflow_pipeline tests
+          uv run ruff check --output-format=github --target-version=py311 dags de_airflow_pipeline tests
+          uv run ruff format --diff --check --target-version=py311 dags de_airflow_pipeline tests
 
       - name: Validate DAG syntax
         run: |
