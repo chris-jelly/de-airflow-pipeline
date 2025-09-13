@@ -1,0 +1,116 @@
+name: Airflow Tests
+
+on:
+  pull_request:
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check_paths:
+    runs-on: ubuntu-latest
+
+    outputs:
+      should_run: ${{ steps.filter.outputs.airflow }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3.0.2
+        id: filter
+        with:
+          filters: |
+            airflow:
+              - 'dags/**'
+              - 'de_airflow_pipeline/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/airflow-tests.yaml'
+
+  test:
+    name: Test Airflow Pipeline
+    needs: check_paths
+    if: ${{ needs.check_paths.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Lint with Ruff
+        run: |
+          uv run ruff check --output-format=github --target-version=py39 dags de_airflow_pipeline tests
+          uv run ruff format --diff --check --target-version=py39 dags de_airflow_pipeline tests
+
+      - name: Validate DAG syntax
+        run: |
+          export PYTHONPATH=$PWD:$PYTHONPATH
+          for dag_file in dags/*.py; do
+            if [[ -f "$dag_file" ]]; then
+              echo "Validating $dag_file..."
+              uv run python -m py_compile "$dag_file"
+            fi
+          done
+
+      - name: Test DAG imports
+        run: |
+          export PYTHONPATH=$PWD:$PYTHONPATH
+          uv run python -c "
+          import sys
+          sys.path.insert(0, '.')
+          try:
+              import dags.salesforce_extraction_dag
+              print('DAG imports successfully')
+          except Exception as e:
+              print(f'DAG import failed: {e}')
+              sys.exit(1)
+          "
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --cov=de_airflow_pipeline --cov-report=xml --cov-fail-under=70
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ./coverage.xml
+          retention-days: 7
+        if: ${{ always() }}
+
+      - name: Coverage report
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: ./coverage.xml
+          badge: true
+          format: markdown
+          output: both
+
+      - name: Add Coverage PR Comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request'
+        with:
+          header: test-coverage
+          recreate: true
+          path: code-coverage-results.md
+
+      - name: Build Docker Image
+        run: docker build -t airflow-pipeline:latest .
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: "airflow-pipeline:latest"
+          format: "table"
+          exit-code: "0"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
