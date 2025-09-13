@@ -8,13 +8,9 @@ from airflow.models import Variable
 import pandas as pd
 import json
 import os
+import sqlalchemy
 
-# Get environment (you can set this as an Airflow Variable)
-env = Variable.get("environment", default_var="dev")  # or "prod"
-
-# Use environment-specific connections
-postgres_conn_id = f"warehouse_postgres_{env}"
-salesforce_conn_id = f"salesforce_{env}"
+# Configuration moved to environment variables as per CLAUDE.md
 
 default_args = {
     'owner': 'data-team',
@@ -37,33 +33,30 @@ dag = DAG(
 
 def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
     """Extract Salesforce object data directly to PostgreSQL."""
+
+    # Access environment variables
+    postgres_host = os.getenv("POSTGRES_HOST")
+    postgres_database = os.getenv("POSTGRES_DATABASE")
+    postgres_user = os.getenv("POSTGRES_USER")
+    postgres_password = os.getenv("POSTGRES_PASSWORD")
+    postgres_port = int(os.getenv("POSTGRES_PORT", '5432'))
+
+    salesforce_username = os.getenv("SALESFORCE_USERNAME")
+    salesforce_password = os.getenv("SALESFORCE_PASSWORD")
+    salesforce_security_token = os.getenv("SALESFORCE_SECURITY_TOKEN")
+    salesforce_domain = os.getenv("SALESFORCE_DOMAIN", 'login')
     
-    # Access environment-specific variables
-    postgres_host = os.getenv(f"POSTGRES_HOST_{env.upper()}")
-    postgres_database = os.getenv(f"POSTGRES_DATABASE_{env.upper()}")
-    postgres_user = os.getenv(f"POSTGRES_USER_{env.upper()}")
-    postgres_password = os.getenv(f"POSTGRES_PASSWORD_{env.upper()}")
-    postgres_port = int(os.getenv(f"POSTGRES_PORT_{env.upper()}", '5432'))
-    
-    salesforce_username = os.getenv(f"SALESFORCE_USERNAME_{env.upper()}")
-    salesforce_password = os.getenv(f"SALESFORCE_PASSWORD_{env.upper()}")
-    salesforce_security_token = os.getenv(f"SALESFORCE_SECURITY_TOKEN_{env.upper()}")
-    salesforce_domain = os.getenv(f"SALESFORCE_DOMAIN_{env.upper()}", 'login')
-    
-    # Get hooks using environment-specific variables
+    # Get hooks
     sf_hook = SalesforceHook(
         username=salesforce_username,
         password=salesforce_password,
         security_token=salesforce_security_token,
         domain=salesforce_domain
     )
-    pg_hook = PostgresHook(
-        host=postgres_host,
-        database=postgres_database,
-        login=postgres_user,
-        password=postgres_password,
-        port=postgres_port
-    )
+
+    # Create PostgreSQL connection string
+    pg_conn_string = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_database}"
+    pg_engine = sqlalchemy.create_engine(pg_conn_string)
     
     # Query Salesforce
     sf_conn = sf_hook.get_conn()
@@ -112,12 +105,14 @@ def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
     """
     
     # Execute CREATE TABLE
-    pg_hook.run(create_table_sql)
-    
+    with pg_engine.connect() as conn:
+        conn.execute(sqlalchemy.text(create_table_sql))
+        conn.commit()
+
     # Insert data
     df.to_sql(
         name=table_name,
-        con=pg_hook.get_sqlalchemy_engine(),
+        con=pg_engine,
         schema='bronze',
         if_exists='append',
         index=False,
@@ -128,21 +123,21 @@ def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
 
 # Create bronze schema
 def create_bronze_schema():
-    # Access environment-specific variables
-    postgres_host = os.getenv(f"POSTGRES_HOST_{env.upper()}")
-    postgres_database = os.getenv(f"POSTGRES_DATABASE_{env.upper()}")
-    postgres_user = os.getenv(f"POSTGRES_USER_{env.upper()}")
-    postgres_password = os.getenv(f"POSTGRES_PASSWORD_{env.upper()}")
-    postgres_port = int(os.getenv(f"POSTGRES_PORT_{env.upper()}", '5432'))
+    # Access environment variables
+    postgres_host = os.getenv("POSTGRES_HOST")
+    postgres_database = os.getenv("POSTGRES_DATABASE")
+    postgres_user = os.getenv("POSTGRES_USER")
+    postgres_password = os.getenv("POSTGRES_PASSWORD")
+    postgres_port = int(os.getenv("POSTGRES_PORT", '5432'))
     
-    pg_hook = PostgresHook(
-        host=postgres_host,
-        database=postgres_database,
-        login=postgres_user,
-        password=postgres_password,
-        port=postgres_port
-    )
-    pg_hook.run("CREATE SCHEMA IF NOT EXISTS bronze;")
+    # Create PostgreSQL connection string
+    pg_conn_string = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_database}"
+    pg_engine = sqlalchemy.create_engine(pg_conn_string)
+
+    # Create schema
+    with pg_engine.connect() as conn:
+        conn.execute(sqlalchemy.text("CREATE SCHEMA IF NOT EXISTS bronze;"))
+        conn.commit()
 
 create_schema_task = PythonOperator(
     task_id='create_bronze_schema',

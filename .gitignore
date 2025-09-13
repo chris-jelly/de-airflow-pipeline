@@ -174,3 +174,6 @@ standalone_admin_password.txt
 *.parquet
 *.json
 data/
+
+# Local documentation and notes
+TODO.md
