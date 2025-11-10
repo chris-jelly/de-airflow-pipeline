@@ -1,0 +1,68 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Development
+.devcontainer
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# Virtual environments
+.venv
+venv
+env
+ENV
+
+# UV
+.python-version
+
+# Airflow local files
+airflow.db
+airflow.cfg
+logs/
+unittests.cfg
+webserver_config.py
+standalone_admin_password.txt
+
+# Data files
+*.csv
+*.parquet
+data/
+
+# Documentation
+README.md
+CLAUDE.md
+*.md
+
+# CI/CD
+.github
+.pre-commit-config.yaml
+
+# Mise
+mise.toml
+.mise.toml
+
+# Misc
+.DS_Store
+.env
+.env.*

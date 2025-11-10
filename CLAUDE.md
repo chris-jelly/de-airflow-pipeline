@@ -49,6 +49,18 @@ uv run airflow db init
 uv run airflow dags list
 ```
 
+### Container Development
+```bash
+# Build container locally
+docker build -t de-airflow-pipeline:local .
+
+# Test container
+docker run -it --rm de-airflow-pipeline:local bash
+
+# The container is automatically built and published to GHCR via GitHub Actions
+# See KUBERNETES.md for deployment details
+```
+
 ## Architecture
 
 ### Data Pipeline Structure
@@ -77,9 +89,12 @@ The pipeline uses **environment variables** for all connections instead of Airfl
 - `POSTGRES_PORT` (optional, defaults to 5432)
 
 ### Deployment
-- Designed for Kubernetes deployment
+- Designed for Kubernetes deployment with KubernetesExecutor
+- Container published to GitHub Container Registry (GHCR) automatically
+- Uses UV for fast, reproducible dependency installation in containers
 - Uses Kubernetes secrets mounted as environment variables
 - Pre-commit hooks configured for code quality
+- See **KUBERNETES.md** for detailed deployment instructions
 
 ### Dependencies
 - Apache Airflow 2.8.1 with Kubernetes support
