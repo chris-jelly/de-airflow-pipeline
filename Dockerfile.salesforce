@@ -16,12 +16,12 @@ USER airflow
 # Set working directory
 WORKDIR /opt/airflow
 
-# Copy dependency files
-COPY --chown=airflow:root pyproject.toml uv.lock ./
+# Copy dependency files for Salesforce DAG
+COPY --chown=airflow:root pyproject.salesforce.toml ./pyproject.toml
 
 # Install dependencies using UV
-# UV will respect the uv.lock file for reproducible builds
-RUN uv sync --frozen --no-dev
+# This image only contains dependencies needed for Salesforce extraction
+RUN uv sync --no-dev
 
 # Copy DAGs and other project files
 COPY --chown=airflow:root dags/ /opt/airflow/dags/

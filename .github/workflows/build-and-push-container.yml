@@ -1,4 +1,4 @@
-name: Build and Push Container to GHCR
+name: Build and Push Containers to GHCR
 
 on:
   push:
@@ -24,6 +24,20 @@ jobs:
       contents: read
       packages: write
 
+    strategy:
+      matrix:
+        include:
+          - name: salesforce
+            dockerfile: Dockerfile.salesforce
+            description: "Salesforce extraction DAG dependencies"
+          # Add more images here as you create them:
+          # - name: dbt
+          #   dockerfile: Dockerfile.dbt
+          #   description: "dbt transformation dependencies"
+          # - name: api
+          #   dockerfile: Dockerfile.api
+          #   description: "API extraction dependencies"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,23 +59,32 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            # For main branch: salesforce-latest, salesforce-main
+            type=raw,value=${{ matrix.name }}-latest,enable={{is_default_branch}}
+            type=raw,value=${{ matrix.name }}-{{branch}},enable=${{ github.ref_type == 'branch' }}
+            # For version tags: salesforce-v1.0.0, salesforce-v1.0, salesforce-v1
+            type=semver,pattern=${{ matrix.name }}-v{{version}}
+            type=semver,pattern=${{ matrix.name }}-v{{major}}.{{minor}}
+            type=semver,pattern=${{ matrix.name }}-v{{major}}
+            # For PRs: salesforce-pr-123
+            type=ref,event=pr,prefix=${{ matrix.name }}-pr-
+            # For commits: salesforce-sha-abc123
+            type=sha,prefix=${{ matrix.name }}-sha-
+          labels: |
+            org.opencontainers.image.title=de-airflow-pipeline-${{ matrix.name }}
+            org.opencontainers.image.description=${{ matrix.description }}
 
       - name: Build and push Docker image
+        id: build-push
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           platforms: linux/amd64
 
       - name: Generate artifact attestation
@@ -69,5 +92,5 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.meta.outputs.digest }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
           push-to-registry: true

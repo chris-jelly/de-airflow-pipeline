@@ -2,32 +2,52 @@
 
 This document describes how to use the containerized Airflow pipeline with KubernetesExecutor.
 
-## Container Image
+## Multi-Image Strategy
 
-The project automatically builds and publishes a Docker container to GitHub Container Registry (GHCR) on every push to main/develop branches and on version tags.
+This project uses a **per-DAG image strategy** where each DAG (or group of DAGs) has its own optimized container image containing only the dependencies it needs.
 
-### Image Location
+### Why Per-DAG Images?
+
+- **Smaller images**: Executor pods only download what they need
+- **Faster startup**: Less to install and initialize
+- **Isolation**: No dependency conflicts between different DAG types
+- **Cost efficiency**: Reduced network transfer and storage costs
+
+See `CONTAINER_STRATEGY.md` for detailed information on the multi-image approach.
+
+## Container Images
+
+The project automatically builds and publishes multiple Docker containers to GitHub Container Registry (GHCR) on every push to main/develop branches and on version tags.
+
+### Image Locations
 
 ```
-ghcr.io/<owner>/de-airflow-pipeline:<tag>
+ghcr.io/chris-jelly/de-airflow-pipeline:<dag-type>-<version>
 ```
 
-Available tags:
-- `latest` - Latest build from main branch
-- `main` - Latest build from main branch
-- `develop` - Latest build from develop branch
-- `v*` - Semantic version tags (e.g., `v1.0.0`, `v1.0`, `v1`)
-- `<branch>-<sha>` - Specific commit SHA from a branch
+**Current Images:**
+- `ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest` - Salesforce extraction DAG
+- `ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-v1.0.0` - Versioned Salesforce image
+
+**Tag Patterns:**
+- `<dag-type>-latest` - Latest build from main branch for specific DAG type
+- `<dag-type>-main` - Latest build from main branch
+- `<dag-type>-develop` - Latest build from develop branch
+- `<dag-type>-v*` - Semantic version tags (e.g., `salesforce-v1.0.0`)
 
 ### Building Locally
 
-To build the container locally:
+To build a specific DAG image locally:
 
 ```bash
-docker build -t de-airflow-pipeline:local .
+# Build salesforce image
+docker build -f Dockerfile.salesforce -t de-airflow-pipeline:salesforce-local .
+
+# Build future images
+docker build -f Dockerfile.<dag-type> -t de-airflow-pipeline:<dag-type>-local .
 ```
 
-The Dockerfile uses UV for dependency management, ensuring fast and reproducible builds.
+Each Dockerfile uses UV for dependency management, ensuring fast and reproducible builds.
 
 ## Kubernetes Configuration
 
@@ -51,9 +71,9 @@ kubectl create secret docker-registry ghcr-secret \
 
 ### Airflow Configuration
 
-Configure your Airflow deployment to use the container image for KubernetesExecutor:
+**IMPORTANT**: Core Airflow components (webserver, scheduler, triggerer) use the default Apache Airflow image. **Only executor pods (workers) use your custom per-DAG images**, which are specified in each DAG's code via `executor_config`.
 
-#### Option 1: Helm Values (Recommended)
+#### Helm Values Configuration (Recommended)
 
 If using the official Airflow Helm chart:
 
@@ -61,16 +81,18 @@ If using the official Airflow Helm chart:
 # values.yaml
 images:
   airflow:
-    repository: ghcr.io/<owner>/de-airflow-pipeline
-    tag: latest
-    pullPolicy: Always
+    # Core components use official Airflow image
+    repository: apache/airflow
+    tag: 2.8.1-python3.11
+    pullPolicy: IfNotPresent
 
-# For private repos
+# For private repos (needed to pull your custom DAG images)
 imagePullSecrets:
   - name: ghcr-secret
 
 executor: KubernetesExecutor
 
+# Environment variables available to all pods
 env:
   # Salesforce credentials
   - name: SALESFORCE_USERNAME
@@ -116,23 +138,58 @@ env:
     value: "5432"
 ```
 
-#### Option 2: airflow.cfg
+### How DAGs Specify Their Images
 
-```ini
-[kubernetes]
-worker_container_repository = ghcr.io/<owner>/de-airflow-pipeline
-worker_container_tag = latest
-delete_worker_pods = True
-delete_worker_pods_on_failure = False
+Each DAG specifies which container image to use via `executor_config` in the DAG definition. This allows different DAGs to use different images with different dependencies.
 
-[kubernetes_environment_variables]
-SALESFORCE_USERNAME = {{ salesforce_username }}
-SALESFORCE_PASSWORD = {{ salesforce_password }}
-SALESFORCE_SECURITY_TOKEN = {{ salesforce_token }}
-POSTGRES_HOST = {{ postgres_host }}
-POSTGRES_DATABASE = {{ postgres_database }}
-POSTGRES_USER = {{ postgres_user }}
-POSTGRES_PASSWORD = {{ postgres_password }}
+Example from `salesforce_extraction_dag.py`:
+
+```python
+# KubernetesExecutor configuration - specify custom image for this DAG
+executor_config = {
+    "pod_override": {
+        "spec": {
+            "containers": [
+                {
+                    "name": "base",
+                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest",
+                }
+            ]
+        }
+    }
+}
+
+default_args = {
+    'owner': 'data-team',
+    # ... other args ...
+    'executor_config': executor_config,  # Apply to all tasks in this DAG
+}
+
+dag = DAG(
+    'salesforce_extraction',
+    default_args=default_args,
+    # ... other dag args ...
+)
+```
+
+You can also override at the task level:
+
+```python
+task = PythonOperator(
+    task_id='my_task',
+    python_callable=my_function,
+    executor_config={
+        "pod_override": {
+            "spec": {
+                "containers": [{
+                    "name": "base",
+                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:custom-latest",
+                }]
+            }
+        }
+    },
+    dag=dag,
+)
 ```
 
 ### Creating Kubernetes Secrets

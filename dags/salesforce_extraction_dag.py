@@ -16,6 +16,21 @@ env = Variable.get("environment", default_var="dev")  # or "prod"
 postgres_conn_id = f"warehouse_postgres_{env}"
 salesforce_conn_id = f"salesforce_{env}"
 
+# KubernetesExecutor configuration - specify custom image for this DAG
+# This allows each DAG to use its own container with only the dependencies it needs
+executor_config = {
+    "pod_override": {
+        "spec": {
+            "containers": [
+                {
+                    "name": "base",
+                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest",
+                }
+            ]
+        }
+    }
+}
+
 default_args = {
     'owner': 'data-team',
     'depends_on_past': False,
@@ -24,6 +39,7 @@ default_args = {
     'email_on_retry': False,
     'retries': 2,
     'retry_delay': timedelta(minutes=5),
+    'executor_config': executor_config,  # Apply to all tasks in this DAG
 }
 
 dag = DAG(
