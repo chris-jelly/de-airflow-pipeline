@@ -92,60 +92,26 @@ imagePullSecrets:
 
 executor: KubernetesExecutor
 
-# Environment variables available to all pods
-env:
-  # Salesforce credentials
-  - name: SALESFORCE_USERNAME
-    valueFrom:
-      secretKeyRef:
-        name: salesforce-credentials
-        key: username
-  - name: SALESFORCE_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: salesforce-credentials
-        key: password
-  - name: SALESFORCE_SECURITY_TOKEN
-    valueFrom:
-      secretKeyRef:
-        name: salesforce-credentials
-        key: security_token
-  - name: SALESFORCE_DOMAIN
-    value: "login"
-
-  # PostgreSQL credentials
-  - name: POSTGRES_HOST
-    valueFrom:
-      secretKeyRef:
-        name: postgres-credentials
-        key: host
-  - name: POSTGRES_DATABASE
-    valueFrom:
-      secretKeyRef:
-        name: postgres-credentials
-        key: database
-  - name: POSTGRES_USER
-    valueFrom:
-      secretKeyRef:
-        name: postgres-credentials
-        key: username
-  - name: POSTGRES_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: postgres-credentials
-        key: password
-  - name: POSTGRES_PORT
-    value: "5432"
+# SECURITY NOTE: Do NOT put data source credentials in global env vars!
+# Instead, mount secrets per-DAG using executor_config (see below)
+# Only put truly global, non-sensitive config here if needed
+env: []
 ```
 
-### How DAGs Specify Their Images
+**Security Best Practice**: Secrets are mounted **per-DAG** using `executor_config`, not globally. This ensures:
+- Scheduler/webserver don't have access to data credentials (principle of least privilege)
+- Each DAG only gets the secrets it needs
+- Different DAGs can't access each other's credentials
 
-Each DAG specifies which container image to use via `executor_config` in the DAG definition. This allows different DAGs to use different images with different dependencies.
+### How DAGs Specify Images and Secrets (Secure Approach)
+
+Each DAG specifies **both** its container image **and** secrets via `executor_config`. This ensures secrets are only available to the specific pods that need them.
 
 Example from `salesforce_extraction_dag.py`:
 
 ```python
-# KubernetesExecutor configuration - specify custom image for this DAG
+# KubernetesExecutor configuration - specify custom image AND secrets for this DAG
+# SECURITY: Secrets are mounted ONLY in executor pods for this DAG, not globally
 executor_config = {
     "pod_override": {
         "spec": {
@@ -153,6 +119,51 @@ executor_config = {
                 {
                     "name": "base",
                     "image": "ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest",
+                    # Mount secrets as environment variables ONLY for this DAG's pods
+                    "env": [
+                        {
+                            "name": "SALESFORCE_USERNAME",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "salesforce-credentials",
+                                    "key": "username"
+                                }
+                            }
+                        },
+                        {
+                            "name": "SALESFORCE_PASSWORD",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "salesforce-credentials",
+                                    "key": "password"
+                                }
+                            }
+                        },
+                        {
+                            "name": "SALESFORCE_SECURITY_TOKEN",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "salesforce-credentials",
+                                    "key": "security_token"
+                                }
+                            }
+                        },
+                        {
+                            "name": "SALESFORCE_DOMAIN",
+                            "value": "login"
+                        },
+                        # PostgreSQL credentials
+                        {
+                            "name": "POSTGRES_HOST",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "postgres-credentials",
+                                    "key": "host"
+                                }
+                            }
+                        },
+                        # ... other PostgreSQL env vars ...
+                    ]
                 }
             ]
         }
@@ -164,33 +175,13 @@ default_args = {
     # ... other args ...
     'executor_config': executor_config,  # Apply to all tasks in this DAG
 }
-
-dag = DAG(
-    'salesforce_extraction',
-    default_args=default_args,
-    # ... other dag args ...
-)
 ```
 
-You can also override at the task level:
-
-```python
-task = PythonOperator(
-    task_id='my_task',
-    python_callable=my_function,
-    executor_config={
-        "pod_override": {
-            "spec": {
-                "containers": [{
-                    "name": "base",
-                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:custom-latest",
-                }]
-            }
-        }
-    },
-    dag=dag,
-)
-```
+**Benefits of this approach:**
+1. **Least Privilege**: Scheduler/webserver don't get data credentials
+2. **Isolation**: Each DAG only gets its own secrets
+3. **Auditable**: Clear which DAG accesses which credentials
+4. **Secure**: Secrets never in code, logs, or Airflow UI
 
 ### Creating Kubernetes Secrets
 
@@ -212,6 +203,134 @@ kubectl create secret generic postgres-credentials \
   --from-literal=password='your-password' \
   --namespace=airflow
 ```
+
+## Advanced Security Options
+
+### Option 1: Pod-Level Secrets (Implemented - Recommended)
+
+**What we use**: Secrets mounted per-DAG via `executor_config`
+
+**Pros**:
+- Simple to implement and understand
+- Clear visibility of which DAG uses which credentials
+- No additional infrastructure required
+- Works with standard Kubernetes secrets
+
+**Cons**:
+- Secrets still stored in etcd (encrypt etcd at rest!)
+- Manual secret creation and rotation
+
+### Option 2: Airflow Secrets Backend
+
+Use Airflow's built-in secrets backend to pull from external systems:
+
+```python
+# In airflow.cfg or Helm values
+[secrets]
+backend = airflow.providers.google.cloud.secrets.secret_manager.CloudSecretManagerBackend
+backend_kwargs = {"project_id": "your-project"}
+```
+
+Supported backends:
+- **AWS Secrets Manager**
+- **Google Cloud Secret Manager**
+- **HashiCorp Vault**
+- **Azure Key Vault**
+
+**Pros**:
+- Centralized secret management
+- Automatic rotation support
+- Audit logging built-in
+- No secrets in Kubernetes
+
+**Cons**:
+- Requires additional infrastructure
+- Cost for external secret service
+- More complex setup
+
+### Option 3: CSI Secret Driver (Most Secure)
+
+Mount secrets from external providers directly into pods using Kubernetes CSI drivers:
+
+```yaml
+# In executor_config
+volumes:
+  - name: secrets-store
+    csi:
+      driver: secrets-store.csi.k8s.io
+      readOnly: true
+      volumeAttributes:
+        secretProviderClass: "salesforce-secrets"
+volumeMounts:
+  - name: secrets-store
+    mountPath: "/mnt/secrets"
+    readOnly: true
+```
+
+**Pros**:
+- Secrets never stored in Kubernetes
+- Automatic rotation
+- Strong audit trail
+- Works with any CSI provider (Vault, AWS, GCP, Azure)
+
+**Cons**:
+- Most complex to set up
+- Requires CSI driver installation
+- Platform-specific configuration
+
+### Option 4: Workload Identity (Cloud Provider)
+
+Use cloud provider workload identity to eliminate static credentials:
+
+**AWS (IRSA)**:
+```yaml
+# Service account with IAM role
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/airflow-salesforce
+```
+
+**GCP (Workload Identity)**:
+```yaml
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: airflow@project.iam.gserviceaccount.com
+```
+
+**Pros**:
+- No static credentials to manage
+- Automatic rotation handled by cloud provider
+- Native cloud integration
+- Fine-grained IAM permissions
+
+**Cons**:
+- Cloud-specific
+- Doesn't work for third-party services like Salesforce
+- Requires cloud provider setup
+
+## Security Recommendations
+
+### Minimum (What We Implement)
+✅ Per-DAG secret mounting via `executor_config`
+✅ Kubernetes secrets with RBAC
+✅ Secrets never in code or logs
+✅ Principle of least privilege
+
+### Recommended for Production
+✅ All of the above, plus:
+✅ Encrypt Kubernetes etcd at rest
+✅ Use external secrets backend (Vault, AWS Secrets Manager, etc.)
+✅ Enable audit logging
+✅ Implement secret rotation policies
+✅ Use network policies to restrict pod communication
+
+### Enterprise/Highly Sensitive
+✅ All of the above, plus:
+✅ CSI secret driver with HSM-backed secrets
+✅ Workload identity where possible
+✅ Runtime secret scanning
+✅ Secrets never touch disk (memory-only mounts)
+✅ Service mesh for mTLS between services
 
 ## Container Details
 
@@ -235,20 +354,20 @@ The container uses UV for dependency management, which provides:
 
 ### Environment Variables
 
-The container expects the following environment variables:
+Environment variables are **mounted per-pod** via `executor_config` in each DAG, not globally.
 
-**Required:**
-- `SALESFORCE_USERNAME` - Salesforce username
-- `SALESFORCE_PASSWORD` - Salesforce password
-- `SALESFORCE_SECURITY_TOKEN` - Salesforce security token
-- `POSTGRES_HOST` - PostgreSQL host
-- `POSTGRES_DATABASE` - PostgreSQL database name
-- `POSTGRES_USER` - PostgreSQL username
-- `POSTGRES_PASSWORD` - PostgreSQL password
-
-**Optional:**
+**For Salesforce DAG (`salesforce_extraction_dag.py`):**
+- `SALESFORCE_USERNAME` - Salesforce username (from secret)
+- `SALESFORCE_PASSWORD` - Salesforce password (from secret)
+- `SALESFORCE_SECURITY_TOKEN` - Salesforce security token (from secret)
 - `SALESFORCE_DOMAIN` - Salesforce domain (default: 'login')
+- `POSTGRES_HOST` - PostgreSQL host (from secret)
+- `POSTGRES_DATABASE` - PostgreSQL database name (from secret)
+- `POSTGRES_USER` - PostgreSQL username (from secret)
+- `POSTGRES_PASSWORD` - PostgreSQL password (from secret)
 - `POSTGRES_PORT` - PostgreSQL port (default: 5432)
+
+These are defined in the DAG's `executor_config` and only available to that DAG's executor pods.
 
 ## Deployment Workflow
 
