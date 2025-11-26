@@ -25,7 +25,7 @@ executor_config = {
             "containers": [
                 {
                     "name": "base",
-                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest",
+                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
                     # Mount secrets as environment variables only for this DAG's pods
                     "env": [
                         # Salesforce credentials - only for this DAG

@@ -15,7 +15,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_BASE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -23,6 +23,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write  # Required for attestations
+      attestations: write  # Required for attestations
 
     strategy:
       matrix:
@@ -57,19 +59,20 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Each DAG type gets its own package for clarity in GHCR UI
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE_NAME }}-${{ matrix.name }}
           tags: |
-            # For main branch: salesforce-latest, salesforce-main
-            type=raw,value=${{ matrix.name }}-latest,enable={{is_default_branch}}
-            type=raw,value=${{ matrix.name }}-{{branch}},enable=${{ github.ref_type == 'branch' }}
-            # For version tags: salesforce-v1.0.0, salesforce-v1.0, salesforce-v1
-            type=semver,pattern=${{ matrix.name }}-v{{version}}
-            type=semver,pattern=${{ matrix.name }}-v{{major}}.{{minor}}
-            type=semver,pattern=${{ matrix.name }}-v{{major}}
-            # For PRs: salesforce-pr-123
-            type=ref,event=pr,prefix=${{ matrix.name }}-pr-
-            # For commits: salesforce-sha-abc123
-            type=sha,prefix=${{ matrix.name }}-sha-
+            # For main branch: latest, main
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{branch}},enable=${{ github.ref_type == 'branch' }}
+            # For version tags: v1.0.0, v1.0, v1
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
+            # For PRs: pr-123
+            type=ref,event=pr,prefix=pr-
+            # For commits: sha-abc123
+            type=sha,prefix=sha-
           labels: |
             org.opencontainers.image.title=de-airflow-pipeline-${{ matrix.name }}
             org.opencontainers.image.description=${{ matrix.description }}
@@ -91,6 +94,6 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE_NAME }}-${{ matrix.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
           push-to-registry: true
