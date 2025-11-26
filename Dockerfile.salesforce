@@ -10,26 +10,25 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Create necessary directories
 RUN mkdir -p /opt/airflow/dags
 
-# Switch to airflow user for the rest of the setup
-USER airflow
-
 # Set working directory
 WORKDIR /opt/airflow
 
 # Copy dependency files for Salesforce DAG
 COPY --chown=airflow:root pyproject.salesforce.toml ./pyproject.toml
 
-# Install dependencies using UV
+# Install dependencies using UV as root (--system requires root permissions)
 # This image only contains dependencies needed for Salesforce extraction
-# Use pip install instead of sync since we're not building a package
 RUN uv pip install --system -r pyproject.toml
+
+# Switch to airflow user for runtime
+USER airflow
 
 # Copy DAGs and other project files
 COPY --chown=airflow:root dags/ /opt/airflow/dags/
 COPY --chown=airflow:root scripts/ /opt/airflow/scripts/
 
 # Set PYTHONPATH to ensure our packages are found
-ENV PYTHONPATH="/opt/airflow:${PYTHONPATH}"
+ENV PYTHONPATH="/opt/airflow"
 
 # The base image already has the correct ENTRYPOINT and CMD
 # which will be used by the KubernetesExecutor

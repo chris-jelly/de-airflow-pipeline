@@ -64,20 +64,22 @@ USER root
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN mkdir -p /opt/airflow/dags
 
-USER airflow
 WORKDIR /opt/airflow
 
 # Copy DAG-specific dependencies
 COPY --chown=airflow:root pyproject.<dag-type>.toml ./pyproject.toml
 
-# Install dependencies (use pip install since we're not building a package)
+# Install dependencies as root (--system requires root permissions)
 RUN uv pip install --system -r pyproject.toml
+
+# Switch to airflow user for runtime
+USER airflow
 
 # Copy DAGs and scripts
 COPY --chown=airflow:root dags/ /opt/airflow/dags/
 COPY --chown=airflow:root scripts/ /opt/airflow/scripts/
 
-ENV PYTHONPATH="/opt/airflow:${PYTHONPATH}"
+ENV PYTHONPATH="/opt/airflow"
 ```
 
 ### 3. Update GitHub Actions Workflow
