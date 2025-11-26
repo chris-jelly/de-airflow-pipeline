@@ -183,154 +183,55 @@ default_args = {
 3. **Auditable**: Clear which DAG accesses which credentials
 4. **Secure**: Secrets never in code, logs, or Airflow UI
 
-### Creating Kubernetes Secrets
+### Secret Management with External Secrets Operator
 
-Create secrets for your credentials:
+This project uses **External Secrets Operator (ESO)** to sync secrets from Azure Key Vault into Kubernetes. ESO automatically creates and updates Kubernetes Secrets based on values stored in Azure.
 
-```bash
-# Salesforce credentials
-kubectl create secret generic salesforce-credentials \
-  --from-literal=username='your-username' \
-  --from-literal=password='your-password' \
-  --from-literal=security_token='your-token' \
-  --namespace=airflow
+**How it works:**
+1. Secrets are stored in Azure Key Vault (source of truth)
+2. ESO syncs them into Kubernetes as standard `Secret` resources
+3. DAGs reference these secrets by name in their `executor_config`
+4. Only executor pods for specific DAGs get access to their secrets
 
-# PostgreSQL credentials
-kubectl create secret generic postgres-credentials \
-  --from-literal=host='postgres.example.com' \
-  --from-literal=database='your-database' \
-  --from-literal=username='your-username' \
-  --from-literal=password='your-password' \
-  --namespace=airflow
-```
-
-## Advanced Security Options
-
-### Option 1: Pod-Level Secrets (Implemented - Recommended)
-
-**What we use**: Secrets mounted per-DAG via `executor_config`
-
-**Pros**:
-- Simple to implement and understand
-- Clear visibility of which DAG uses which credentials
-- No additional infrastructure required
-- Works with standard Kubernetes secrets
-
-**Cons**:
-- Secrets still stored in etcd (encrypt etcd at rest!)
-- Manual secret creation and rotation
-
-### Option 2: Airflow Secrets Backend
-
-Use Airflow's built-in secrets backend to pull from external systems:
-
-```python
-# In airflow.cfg or Helm values
-[secrets]
-backend = airflow.providers.google.cloud.secrets.secret_manager.CloudSecretManagerBackend
-backend_kwargs = {"project_id": "your-project"}
-```
-
-Supported backends:
-- **AWS Secrets Manager**
-- **Google Cloud Secret Manager**
-- **HashiCorp Vault**
-- **Azure Key Vault**
-
-**Pros**:
-- Centralized secret management
-- Automatic rotation support
-- Audit logging built-in
-- No secrets in Kubernetes
-
-**Cons**:
-- Requires additional infrastructure
-- Cost for external secret service
-- More complex setup
-
-### Option 3: CSI Secret Driver (Most Secure)
-
-Mount secrets from external providers directly into pods using Kubernetes CSI drivers:
+**Example ExternalSecret configuration:**
 
 ```yaml
-# In executor_config
-volumes:
-  - name: secrets-store
-    csi:
-      driver: secrets-store.csi.k8s.io
-      readOnly: true
-      volumeAttributes:
-        secretProviderClass: "salesforce-secrets"
-volumeMounts:
-  - name: secrets-store
-    mountPath: "/mnt/secrets"
-    readOnly: true
+# Managed by your platform team - for reference only
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: salesforce-credentials
+  namespace: airflow
+spec:
+  secretStoreRef:
+    name: azure-key-vault
+    kind: SecretStore
+  target:
+    name: salesforce-credentials  # This is what DAGs reference
+  data:
+    - secretKey: username
+      remoteRef:
+        key: salesforce-username
+    - secretKey: password
+      remoteRef:
+        key: salesforce-password
+    - secretKey: security_token
+      remoteRef:
+        key: salesforce-security-token
 ```
 
-**Pros**:
-- Secrets never stored in Kubernetes
-- Automatic rotation
-- Strong audit trail
-- Works with any CSI provider (Vault, AWS, GCP, Azure)
+**Required secrets for Salesforce DAG:**
+- `salesforce-credentials` - Salesforce authentication (username, password, security_token)
+- `postgres-credentials` - PostgreSQL connection (host, database, username, password)
 
-**Cons**:
-- Most complex to set up
-- Requires CSI driver installation
-- Platform-specific configuration
+**Benefits of ESO approach:**
+- ✅ Centralized secret management in Azure Key Vault
+- ✅ Automatic synchronization and rotation
+- ✅ Audit trail in Azure
+- ✅ Secrets never manually created in Kubernetes
+- ✅ Works seamlessly with per-DAG secret mounting
 
-### Option 4: Workload Identity (Cloud Provider)
-
-Use cloud provider workload identity to eliminate static credentials:
-
-**AWS (IRSA)**:
-```yaml
-# Service account with IAM role
-serviceAccount:
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/airflow-salesforce
-```
-
-**GCP (Workload Identity)**:
-```yaml
-serviceAccount:
-  annotations:
-    iam.gke.io/gcp-service-account: airflow@project.iam.gserviceaccount.com
-```
-
-**Pros**:
-- No static credentials to manage
-- Automatic rotation handled by cloud provider
-- Native cloud integration
-- Fine-grained IAM permissions
-
-**Cons**:
-- Cloud-specific
-- Doesn't work for third-party services like Salesforce
-- Requires cloud provider setup
-
-## Security Recommendations
-
-### Minimum (What We Implement)
-✅ Per-DAG secret mounting via `executor_config`
-✅ Kubernetes secrets with RBAC
-✅ Secrets never in code or logs
-✅ Principle of least privilege
-
-### Recommended for Production
-✅ All of the above, plus:
-✅ Encrypt Kubernetes etcd at rest
-✅ Use external secrets backend (Vault, AWS Secrets Manager, etc.)
-✅ Enable audit logging
-✅ Implement secret rotation policies
-✅ Use network policies to restrict pod communication
-
-### Enterprise/Highly Sensitive
-✅ All of the above, plus:
-✅ CSI secret driver with HSM-backed secrets
-✅ Workload identity where possible
-✅ Runtime secret scanning
-✅ Secrets never touch disk (memory-only mounts)
-✅ Service mesh for mTLS between services
+For alternative secret management approaches, see ADR documents in the `adrs/` folder.
 
 ## Container Details
 
