@@ -11,17 +11,23 @@ This project uses a **multi-image strategy** where each DAG (or group of related
 
 ## Image Naming Convention
 
-Images are published to GHCR with tags following this pattern:
+Each DAG type gets its own package in GHCR for better visibility and organization:
 
 ```
-ghcr.io/<owner>/de-airflow-pipeline:<dag-type>-<version>
+ghcr.io/<owner>/de-airflow-pipeline-<dag-type>:<version>
 ```
 
 Examples:
-- `ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest`
-- `ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-v1.0.0`
-- `ghcr.io/chris-jelly/de-airflow-pipeline:dbt-latest` (future)
-- `ghcr.io/chris-jelly/de-airflow-pipeline:api-latest` (future)
+- `ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest`
+- `ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:v1.0.0`
+- `ghcr.io/chris-jelly/de-airflow-pipeline-dbt:latest` (future)
+- `ghcr.io/chris-jelly/de-airflow-pipeline-api:latest` (future)
+
+**Benefits of separate packages:**
+- Clear visibility in GHCR UI - each DAG type appears as its own package
+- Easier to manage permissions per DAG type
+- Simpler tag naming (just `latest`, `v1.0.0` instead of `salesforce-latest`)
+- Better organization when you have many DAG types
 
 ## Current Images
 
@@ -97,7 +103,7 @@ executor_config = {
             "containers": [
                 {
                     "name": "base",
-                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:<dag-type>-latest",
+                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline-<dag-type>:latest",
                 }
             ]
         }

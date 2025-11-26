@@ -21,19 +21,23 @@ The project automatically builds and publishes multiple Docker containers to Git
 
 ### Image Locations
 
+Each DAG type has its own package in GHCR for clarity:
+
 ```
-ghcr.io/chris-jelly/de-airflow-pipeline:<dag-type>-<version>
+ghcr.io/chris-jelly/de-airflow-pipeline-<dag-type>:<version>
 ```
 
 **Current Images:**
-- `ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest` - Salesforce extraction DAG
-- `ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-v1.0.0` - Versioned Salesforce image
+- `ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest` - Salesforce extraction DAG
+- `ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:v1.0.0` - Versioned Salesforce image
+- `ghcr.io/chris-jelly/de-airflow-pipeline-dbt:latest` - Future: dbt transformation DAG
 
 **Tag Patterns:**
-- `<dag-type>-latest` - Latest build from main branch for specific DAG type
-- `<dag-type>-main` - Latest build from main branch
-- `<dag-type>-develop` - Latest build from develop branch
-- `<dag-type>-v*` - Semantic version tags (e.g., `salesforce-v1.0.0`)
+- `latest` - Latest build from main branch
+- `main` / `develop` - Branch-specific builds
+- `v1.0.0`, `v1.0`, `v1` - Semantic version tags
+- `pr-123` - Pull request builds
+- `sha-abc123` - Commit-specific builds
 
 ### Building Locally
 
@@ -118,7 +122,7 @@ executor_config = {
             "containers": [
                 {
                     "name": "base",
-                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest",
+                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
                     # Mount secrets as environment variables ONLY for this DAG's pods
                     "env": [
                         {
