@@ -16,6 +16,98 @@ env = Variable.get("environment", default_var="dev")  # or "prod"
 postgres_conn_id = f"warehouse_postgres_{env}"
 salesforce_conn_id = f"salesforce_{env}"
 
+# KubernetesExecutor configuration - specify custom image and secrets for this DAG
+# SECURITY: Secrets are mounted ONLY in executor pods for this DAG, not globally
+# This follows the principle of least privilege - scheduler/webserver don't get these credentials
+executor_config = {
+    "pod_override": {
+        "spec": {
+            "containers": [
+                {
+                    "name": "base",
+                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline:salesforce-latest",
+                    # Mount secrets as environment variables only for this DAG's pods
+                    "env": [
+                        # Salesforce credentials - only for this DAG
+                        {
+                            "name": "SALESFORCE_USERNAME",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "salesforce-credentials",
+                                    "key": "username"
+                                }
+                            }
+                        },
+                        {
+                            "name": "SALESFORCE_PASSWORD",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "salesforce-credentials",
+                                    "key": "password"
+                                }
+                            }
+                        },
+                        {
+                            "name": "SALESFORCE_SECURITY_TOKEN",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "salesforce-credentials",
+                                    "key": "security_token"
+                                }
+                            }
+                        },
+                        {
+                            "name": "SALESFORCE_DOMAIN",
+                            "value": "login"
+                        },
+                        # PostgreSQL credentials - shared with other DAGs that need it
+                        {
+                            "name": "POSTGRES_HOST",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "postgres-credentials",
+                                    "key": "host"
+                                }
+                            }
+                        },
+                        {
+                            "name": "POSTGRES_DATABASE",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "postgres-credentials",
+                                    "key": "database"
+                                }
+                            }
+                        },
+                        {
+                            "name": "POSTGRES_USER",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "postgres-credentials",
+                                    "key": "username"
+                                }
+                            }
+                        },
+                        {
+                            "name": "POSTGRES_PASSWORD",
+                            "valueFrom": {
+                                "secretKeyRef": {
+                                    "name": "postgres-credentials",
+                                    "key": "password"
+                                }
+                            }
+                        },
+                        {
+                            "name": "POSTGRES_PORT",
+                            "value": "5432"
+                        },
+                    ]
+                }
+            ]
+        }
+    }
+}
+
 default_args = {
     'owner': 'data-team',
     'depends_on_past': False,
@@ -24,6 +116,7 @@ default_args = {
     'email_on_retry': False,
     'retries': 2,
     'retry_delay': timedelta(minutes=5),
+    'executor_config': executor_config,  # Apply to all tasks in this DAG
 }
 
 dag = DAG(
@@ -37,18 +130,18 @@ dag = DAG(
 
 def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
     """Extract Salesforce object data directly to PostgreSQL."""
-    
-    # Access environment-specific variables
-    postgres_host = os.getenv(f"POSTGRES_HOST_{env.upper()}")
-    postgres_database = os.getenv(f"POSTGRES_DATABASE_{env.upper()}")
-    postgres_user = os.getenv(f"POSTGRES_USER_{env.upper()}")
-    postgres_password = os.getenv(f"POSTGRES_PASSWORD_{env.upper()}")
-    postgres_port = int(os.getenv(f"POSTGRES_PORT_{env.upper()}", '5432'))
-    
-    salesforce_username = os.getenv(f"SALESFORCE_USERNAME_{env.upper()}")
-    salesforce_password = os.getenv(f"SALESFORCE_PASSWORD_{env.upper()}")
-    salesforce_security_token = os.getenv(f"SALESFORCE_SECURITY_TOKEN_{env.upper()}")
-    salesforce_domain = os.getenv(f"SALESFORCE_DOMAIN_{env.upper()}", 'login')
+
+    # Access environment variables (injected into pod via executor_config)
+    postgres_host = os.getenv("POSTGRES_HOST")
+    postgres_database = os.getenv("POSTGRES_DATABASE")
+    postgres_user = os.getenv("POSTGRES_USER")
+    postgres_password = os.getenv("POSTGRES_PASSWORD")
+    postgres_port = int(os.getenv("POSTGRES_PORT", '5432'))
+
+    salesforce_username = os.getenv("SALESFORCE_USERNAME")
+    salesforce_password = os.getenv("SALESFORCE_PASSWORD")
+    salesforce_security_token = os.getenv("SALESFORCE_SECURITY_TOKEN")
+    salesforce_domain = os.getenv("SALESFORCE_DOMAIN", 'login')
     
     # Get hooks using environment-specific variables
     sf_hook = SalesforceHook(
@@ -128,12 +221,12 @@ def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
 
 # Create bronze schema
 def create_bronze_schema():
-    # Access environment-specific variables
-    postgres_host = os.getenv(f"POSTGRES_HOST_{env.upper()}")
-    postgres_database = os.getenv(f"POSTGRES_DATABASE_{env.upper()}")
-    postgres_user = os.getenv(f"POSTGRES_USER_{env.upper()}")
-    postgres_password = os.getenv(f"POSTGRES_PASSWORD_{env.upper()}")
-    postgres_port = int(os.getenv(f"POSTGRES_PORT_{env.upper()}", '5432'))
+    # Access environment variables (injected into pod via executor_config)
+    postgres_host = os.getenv("POSTGRES_HOST")
+    postgres_database = os.getenv("POSTGRES_DATABASE")
+    postgres_user = os.getenv("POSTGRES_USER")
+    postgres_password = os.getenv("POSTGRES_PASSWORD")
+    postgres_port = int(os.getenv("POSTGRES_PORT", '5432'))
     
     pg_hook = PostgresHook(
         host=postgres_host,
