@@ -40,6 +40,7 @@ To create a new optimized image for a different DAG:
 Create `pyproject.<dag-type>.toml`:
 
 ```toml
+# Note: No [build-system] section needed - we only use this for dependency management
 [project]
 name = "de-airflow-pipeline-<dag-type>"
 version = "0.1.0"
@@ -50,10 +51,6 @@ dependencies = [
     "apache-airflow-providers-<provider>==x.x.x",
     "some-other-library==x.x.x",
 ]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 ```
 
 ### 2. Create DAG-Specific Dockerfile
@@ -73,8 +70,8 @@ WORKDIR /opt/airflow
 # Copy DAG-specific dependencies
 COPY --chown=airflow:root pyproject.<dag-type>.toml ./pyproject.toml
 
-# Install dependencies
-RUN uv sync --no-dev
+# Install dependencies (use pip install since we're not building a package)
+RUN uv pip install --system -r pyproject.toml
 
 # Copy DAGs and scripts
 COPY --chown=airflow:root dags/ /opt/airflow/dags/
@@ -149,7 +146,7 @@ docker build -f Dockerfile.salesforce -t de-airflow-pipeline:salesforce-test .
 docker run -it --rm de-airflow-pipeline:salesforce-test bash
 
 # Inside container, verify dependencies
-pip list | grep airflow
+uv pip list | grep airflow
 ```
 
 ## Shared Dependencies
