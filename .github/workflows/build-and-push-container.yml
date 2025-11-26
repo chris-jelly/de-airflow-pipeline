@@ -23,6 +23,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write  # Required for attestations
+      attestations: write  # Required for attestations
 
     strategy:
       matrix:
