@@ -33,31 +33,22 @@ executor_config = {
                     image="ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
                     # Mount secrets as environment variables only for this DAG's pods
                     env=[
-                        # Salesforce credentials - only for this DAG
+                        # Salesforce OAuth credentials - only for this DAG
                         k8s.V1EnvVar(
-                            name="SALESFORCE_USERNAME",
+                            name="SALESFORCE_CONSUMER_KEY",
                             value_from=k8s.V1EnvVarSource(
                                 secret_key_ref=k8s.V1SecretKeySelector(
                                     name="salesforce-credentials",
-                                    key="username",
+                                    key="consumer_key",
                                 )
                             ),
                         ),
                         k8s.V1EnvVar(
-                            name="SALESFORCE_PASSWORD",
+                            name="SALESFORCE_CONSUMER_SECRET",
                             value_from=k8s.V1EnvVarSource(
                                 secret_key_ref=k8s.V1SecretKeySelector(
                                     name="salesforce-credentials",
-                                    key="password",
-                                )
-                            ),
-                        ),
-                        k8s.V1EnvVar(
-                            name="SALESFORCE_SECURITY_TOKEN",
-                            value_from=k8s.V1EnvVarSource(
-                                secret_key_ref=k8s.V1SecretKeySelector(
-                                    name="salesforce-credentials",
-                                    key="security_token",
+                                    key="consumer_secret",
                                 )
                             ),
                         ),
@@ -142,16 +133,14 @@ def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
     postgres_password = os.getenv("POSTGRES_PASSWORD")
     postgres_port = int(os.getenv("POSTGRES_PORT", "5432"))
 
-    salesforce_username = os.getenv("SALESFORCE_USERNAME")
-    salesforce_password = os.getenv("SALESFORCE_PASSWORD")
-    salesforce_security_token = os.getenv("SALESFORCE_SECURITY_TOKEN")
+    salesforce_consumer_key = os.getenv("SALESFORCE_CONSUMER_KEY")
+    salesforce_consumer_secret = os.getenv("SALESFORCE_CONSUMER_SECRET")
     salesforce_domain = os.getenv("SALESFORCE_DOMAIN", "login")
 
-    # Get hooks using environment-specific variables
+    # Get hooks using OAuth credentials
     sf_hook = SalesforceHook(
-        username=salesforce_username,
-        password=salesforce_password,
-        security_token=salesforce_security_token,
+        consumer_key=salesforce_consumer_key,
+        consumer_secret=salesforce_consumer_secret,
         domain=salesforce_domain,
     )
     pg_hook = PostgresHook(
