@@ -4,6 +4,7 @@ from airflow import DAG
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.operators.python import PythonOperator
 from airflow.models import Variable
+from kubernetes.client import models as k8s
 import pandas as pd
 import json
 import os
@@ -24,86 +25,86 @@ salesforce_conn_id = f"salesforce_{env}"
 # SECURITY: Secrets are mounted ONLY in executor pods for this DAG, not globally
 # This follows the principle of least privilege - scheduler/webserver don't get these credentials
 executor_config = {
-    "pod_override": {
-        "spec": {
-            "containers": [
-                {
-                    "name": "base",
-                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
+    "pod_override": k8s.V1Pod(
+        spec=k8s.V1PodSpec(
+            containers=[
+                k8s.V1Container(
+                    name="base",
+                    image="ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
                     # Mount secrets as environment variables only for this DAG's pods
-                    "env": [
+                    env=[
                         # Salesforce credentials - only for this DAG
-                        {
-                            "name": "SALESFORCE_USERNAME",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "salesforce-credentials",
-                                    "key": "username",
-                                }
-                            },
-                        },
-                        {
-                            "name": "SALESFORCE_PASSWORD",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "salesforce-credentials",
-                                    "key": "password",
-                                }
-                            },
-                        },
-                        {
-                            "name": "SALESFORCE_SECURITY_TOKEN",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "salesforce-credentials",
-                                    "key": "security_token",
-                                }
-                            },
-                        },
-                        {"name": "SALESFORCE_DOMAIN", "value": "login"},
+                        k8s.V1EnvVar(
+                            name="SALESFORCE_USERNAME",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="salesforce-credentials",
+                                    key="username",
+                                )
+                            ),
+                        ),
+                        k8s.V1EnvVar(
+                            name="SALESFORCE_PASSWORD",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="salesforce-credentials",
+                                    key="password",
+                                )
+                            ),
+                        ),
+                        k8s.V1EnvVar(
+                            name="SALESFORCE_SECURITY_TOKEN",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="salesforce-credentials",
+                                    key="security_token",
+                                )
+                            ),
+                        ),
+                        k8s.V1EnvVar(name="SALESFORCE_DOMAIN", value="login"),
                         # PostgreSQL credentials - shared with other DAGs that need it
-                        {
-                            "name": "POSTGRES_HOST",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "postgres-credentials",
-                                    "key": "host",
-                                }
-                            },
-                        },
-                        {
-                            "name": "POSTGRES_DATABASE",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "postgres-credentials",
-                                    "key": "database",
-                                }
-                            },
-                        },
-                        {
-                            "name": "POSTGRES_USER",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "postgres-credentials",
-                                    "key": "username",
-                                }
-                            },
-                        },
-                        {
-                            "name": "POSTGRES_PASSWORD",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "postgres-credentials",
-                                    "key": "password",
-                                }
-                            },
-                        },
-                        {"name": "POSTGRES_PORT", "value": "5432"},
+                        k8s.V1EnvVar(
+                            name="POSTGRES_HOST",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="postgres-credentials",
+                                    key="host",
+                                )
+                            ),
+                        ),
+                        k8s.V1EnvVar(
+                            name="POSTGRES_DATABASE",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="postgres-credentials",
+                                    key="database",
+                                )
+                            ),
+                        ),
+                        k8s.V1EnvVar(
+                            name="POSTGRES_USER",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="postgres-credentials",
+                                    key="username",
+                                )
+                            ),
+                        ),
+                        k8s.V1EnvVar(
+                            name="POSTGRES_PASSWORD",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="postgres-credentials",
+                                    key="password",
+                                )
+                            ),
+                        ),
+                        k8s.V1EnvVar(name="POSTGRES_PORT", value="5432"),
                     ],
-                }
+                )
             ]
-        }
-    }
+        )
+    )
 }
 
 default_args = {
