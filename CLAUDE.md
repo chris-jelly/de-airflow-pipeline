@@ -88,6 +88,49 @@ The pipeline uses **environment variables** for all connections instead of Airfl
 - `POSTGRES_PASSWORD`
 - `POSTGRES_PORT` (optional, defaults to 5432)
 
+#### DAG Development Pattern: Lazy Imports
+
+**IMPORTANT**: All DAGs in this repository use the **Lazy Import Pattern** for provider dependencies.
+
+**Why**: The Airflow scheduler runs on the base Apache Airflow image without provider packages. Each DAG's tasks run in specialized Docker images with their specific dependencies. To allow the scheduler to parse DAGs while keeping worker pods isolated, we use lazy imports.
+
+**Pattern**:
+
+```python
+from typing import TYPE_CHECKING
+
+# Type hints only - not executed at runtime (for IDE support)
+if TYPE_CHECKING:
+    from airflow.providers.salesforce.hooks.salesforce import SalesforceHook
+    from airflow.providers.postgres.hooks.postgres import PostgresHook
+
+# DAG definition (parsed by scheduler)
+dag = DAG(...)
+
+def my_task_function(**context):
+    """Task function docstring."""
+    # Import providers at runtime (available in worker pod)
+    from airflow.providers.salesforce.hooks.salesforce import SalesforceHook
+    from airflow.providers.postgres.hooks.postgres import PostgresHook
+
+    # Task logic here
+    sf_hook = SalesforceHook(...)
+    # ...
+```
+
+**Benefits**:
+- Scheduler can parse all DAGs without provider packages
+- Each DAG runs in its own specialized image via `executor_config`
+- Scales to 10+ different DAG types without scheduler bloat
+- Improves DAG parsing performance
+- Maintains type safety for IDEs
+
+**When creating new DAGs**:
+1. Use `TYPE_CHECKING` for type hints at module level
+2. Move actual imports inside task functions
+3. Specify custom image in `executor_config`
+4. Create corresponding `pyproject.<dag-type>.toml` and `Dockerfile.<dag-type>`
+
 ### Deployment
 - Designed for Kubernetes deployment with KubernetesExecutor
 - Container published to GitHub Container Registry (GHCR) automatically
