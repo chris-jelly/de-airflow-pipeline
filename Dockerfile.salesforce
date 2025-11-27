@@ -18,7 +18,7 @@ COPY --chown=airflow:root pyproject.salesforce.toml ./pyproject.toml
 
 # Install dependencies using UV as root (--system requires root permissions)
 # This image only contains dependencies needed for Salesforce extraction
-RUN uv pip install --system -r pyproject.toml
+RUN uv pip install --system --no-cache .
 
 # Switch to airflow user for runtime
 USER airflow
