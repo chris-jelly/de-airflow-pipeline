@@ -1,5 +1,5 @@
 # Use official Apache Airflow image as base
-FROM apache/airflow:2.8.1-python3.11
+FROM apache/airflow:3.1.5-python3.13
 
 # Switch to root to install UV and dependencies
 USER root
@@ -13,8 +13,8 @@ RUN mkdir -p /opt/airflow/dags
 # Set working directory
 WORKDIR /opt/airflow
 
-# Copy dependency files for Salesforce DAG
-COPY --chown=airflow:root pyproject.salesforce.toml ./pyproject.toml
+# Copy this DAG's pyproject.toml
+COPY --chown=airflow:root dags/salesforce/pyproject.toml ./pyproject.toml
 
 # Install dependencies using UV as root (--system requires root permissions)
 # This image only contains dependencies needed for Salesforce extraction
@@ -23,9 +23,8 @@ RUN uv pip install --system --no-cache .
 # Switch to airflow user for runtime
 USER airflow
 
-# Copy DAGs and other project files
+# Copy ALL DAGs (scheduler needs to discover all DAG files)
 COPY --chown=airflow:root dags/ /opt/airflow/dags/
-COPY --chown=airflow:root scripts/ /opt/airflow/scripts/
 
 # Set PYTHONPATH to ensure our packages are found
 ENV PYTHONPATH="/opt/airflow"

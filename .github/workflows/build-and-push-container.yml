@@ -30,14 +30,14 @@ jobs:
       matrix:
         include:
           - name: salesforce
-            dockerfile: Dockerfile.salesforce
+            dockerfile: dags/salesforce/Dockerfile
             description: "Salesforce extraction DAG dependencies"
           # Add more images here as you create them:
           # - name: dbt
-          #   dockerfile: Dockerfile.dbt
+          #   dockerfile: dags/dbt/Dockerfile
           #   description: "dbt transformation dependencies"
           # - name: api
-          #   dockerfile: Dockerfile.api
+          #   dockerfile: dags/api/Dockerfile
           #   description: "API extraction dependencies"
 
     steps:

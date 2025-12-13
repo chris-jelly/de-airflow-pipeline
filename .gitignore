@@ -160,6 +160,15 @@ cython_debug/
 
 # UV
 .python-version
+uv.lock
+
+# Per-DAG virtual environments and build artifacts
+dags/*/.venv/
+dags/*/uv.lock
+dags/*/__pycache__/
+dags/*/*.pyc
+dags/*/.pytest_cache/
+dags/*/.ruff_cache/
 
 # Airflow specific
 airflow.db

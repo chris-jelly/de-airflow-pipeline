@@ -15,50 +15,69 @@ This is a data engineering pipeline that extracts data from Salesforce and loads
 ## Common Commands
 
 ### Setup and Installation
+
+Each DAG type is its own complete project. Work in the DAG's directory:
+
 ```bash
-# Install dependencies
+# Work on Salesforce DAG
+cd dags/salesforce
+
+# Install dependencies (runtime + dev tools)
 uv sync
 
-# Install development dependencies
-uv sync --dev
-
-# Setup development environment (runs automatically via mise hooks)
-./scripts/setup_project
+# This installs:
+# - Apache Airflow 2.8.1 with Kubernetes
+# - Salesforce and Postgres providers
+# - pandas, psycopg2-binary
+# - Dev tools: pytest, ruff, black
 ```
 
 ### Code Quality
+
 ```bash
-# Format code
-uv run black .
-
-# Lint code
+# From within dags/salesforce/
+uv run ruff format .
 uv run ruff check .
-
-# Run tests
-uv run pytest
 ```
 
-### Airflow Development
-```bash
-# Test DAG syntax
-uv run python -m py_compile dags/salesforce_extraction_dag.py
+### Testing
 
-# Run Airflow locally (if needed for testing)
-export AIRFLOW_HOME=$(pwd)
-uv run airflow db init
-uv run airflow dags list
+```bash
+# From within dags/salesforce/
+uv run pytest
+
+# Or specific test
+uv run pytest tests/test_salesforce_extraction_dag.py
+```
+
+### DAG Validation
+
+```bash
+# From within dags/salesforce/
+uv run python -m py_compile salesforce_extraction_dag.py
 ```
 
 ### Container Development
+
 ```bash
-# Build container locally
-docker build -t de-airflow-pipeline:local .
+# From repo root
+docker build -f dags/salesforce/Dockerfile -t de-airflow-pipeline-salesforce:local .
 
 # Test container
-docker run -it --rm de-airflow-pipeline:local bash
+docker run -it --rm de-airflow-pipeline-salesforce:local bash
 
 # The container is automatically built and published to GHCR via GitHub Actions
 # See KUBERNETES.md for deployment details
+```
+
+### Testing All DAGs (if needed)
+
+```bash
+# From repo root
+for dag_dir in dags/*/; do
+  echo "Testing $(basename $dag_dir)"
+  cd "$dag_dir" && uv run pytest && cd - || exit 1
+done
 ```
 
 ## Architecture
@@ -69,8 +88,20 @@ docker run -it --rm de-airflow-pipeline:local bash
 
 ### Key Components
 
-#### DAGs (`dags/`)
-- `salesforce_extraction_dag.py`: Main extraction pipeline that pulls Account, Contact, and Opportunity data from Salesforce to PostgreSQL bronze layer
+#### DAG Structure (`dags/`)
+
+Each DAG type is structured as a complete, independent project:
+
+```
+dags/
+└── salesforce/
+    ├── salesforce_extraction_dag.py  # DAG file
+    ├── pyproject.toml                # Complete dependencies (Airflow + providers + dev tools)
+    ├── Dockerfile                    # Container build
+    └── tests/                        # DAG-specific tests
+```
+
+- `salesforce/salesforce_extraction_dag.py`: Main extraction pipeline that pulls Account, Contact, and Opportunity data from Salesforce to PostgreSQL bronze layer
 
 #### Connection Strategy
 The pipeline uses **environment variables** for all connections instead of Airflow connections:
@@ -125,11 +156,28 @@ def my_task_function(**context):
 - Improves DAG parsing performance
 - Maintains type safety for IDEs
 
-**When creating new DAGs**:
-1. Use `TYPE_CHECKING` for type hints at module level
-2. Move actual imports inside task functions
-3. Specify custom image in `executor_config`
-4. Create corresponding `pyproject.<dag-type>.toml` and `Dockerfile.<dag-type>`
+**When creating new DAG types**:
+1. Create `dags/<type>/` directory structure with `tests/` subdirectory
+2. Add complete `pyproject.toml` with Airflow core + specific providers + dev tools
+3. Add `Dockerfile` for container build
+4. Use `TYPE_CHECKING` for type hints at module level in DAG files
+5. Move actual provider imports inside task functions
+6. Specify custom image in `executor_config` pointing to your DAG's container
+7. Update CI/CD matrix in `.github/workflows/build-and-push-container.yml`
+
+**Why this structure**:
+- Complete isolation: Each DAG has only its required dependencies
+- Production parity: `uv sync` installs exact container environment
+- No confusion: One pyproject.toml per DAG type, no root dependencies
+- Aligns with ADR-001: Per-DAG container images strategy
+
+**Workflow**:
+```bash
+cd dags/salesforce    # Enter DAG project
+uv sync               # Install complete environment
+uv run pytest         # Test this DAG
+uv run ruff format .  # Format code
+```
 
 ### Deployment
 - Designed for Kubernetes deployment with KubernetesExecutor
