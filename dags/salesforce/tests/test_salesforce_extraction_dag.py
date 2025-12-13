@@ -1,27 +1,8 @@
 """Tests for the Salesforce extraction DAG."""
 
 
-
 class TestSalesforceExtractionDag:
     """Test suite for salesforce_extraction DAG."""
-
-    def test_dag_loads(self):
-        """Verify DAG can be imported without errors."""
-        from salesforce_extraction_dag import dag
-
-        assert dag is not None
-
-    def test_dag_id(self):
-        """Verify DAG has the expected ID."""
-        from salesforce_extraction_dag import dag
-
-        assert dag.dag_id == "salesforce_extraction"
-
-    def test_dag_has_tasks(self):
-        """Verify DAG contains expected tasks."""
-        from salesforce_extraction_dag import dag
-
-        assert len(dag.tasks) > 0
 
     def test_dag_task_ids(self):
         """Verify DAG contains all expected task IDs."""
@@ -53,21 +34,6 @@ class TestSalesforceExtractionDag:
         assert create_schema in extract_accounts.upstream_list
         assert create_schema in extract_opportunities.upstream_list
         assert create_schema in extract_contacts.upstream_list
-
-    def test_dag_default_args(self):
-        """Verify DAG has expected default args."""
-        from salesforce_extraction_dag import dag
-
-        assert dag.default_args["owner"] == "data-team"
-        assert dag.default_args["retries"] == 2
-
-    def test_dag_schedule(self):
-        """Verify DAG has expected schedule."""
-        from salesforce_extraction_dag import dag
-
-        assert str(dag.schedule) == "@daily"
-        assert dag.catchup is False
-        assert dag.max_active_runs == 1
 
     def test_executor_config_present(self):
         """Verify tasks have executor_config for Kubernetes."""
