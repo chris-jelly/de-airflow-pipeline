@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 from airflow import DAG
-from airflow.providers.postgres.operators.postgres import PostgresOperator
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from airflow.models import Variable
 from kubernetes.client import models as k8s
 import pandas as pd
@@ -11,8 +10,7 @@ import os
 
 # Type hints only - not executed at runtime
 if TYPE_CHECKING:
-    from airflow.providers.postgres.hooks.postgres import PostgresHook
-    from airflow.providers.salesforce.hooks.salesforce import SalesforceHook
+    pass
 
 # Get environment (you can set this as an Airflow Variable)
 env = Variable.get("environment", default_var="dev")  # or "prod"
@@ -113,7 +111,7 @@ dag = DAG(
     "salesforce_extraction",
     default_args=default_args,
     description="Extract Salesforce data to PostgreSQL bronze layer",
-    schedule_interval="@daily",
+    schedule="@daily",
     catchup=False,
     max_active_runs=1,
 )

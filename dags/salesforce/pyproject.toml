@@ -1,0 +1,40 @@
+[project]
+name = "de-airflow-pipeline-salesforce"
+version = "0.1.0"
+description = "Salesforce extraction DAG with complete dependencies"
+requires-python = ">=3.13"
+dependencies = [
+    # Airflow core (Kubernetes support included in v3+)
+    "apache-airflow>=3.1.5",
+
+    # Providers needed for this DAG
+    "apache-airflow-providers-cncf-kubernetes>=9.0",
+    "apache-airflow-providers-postgres>=6.5",
+    "apache-airflow-providers-salesforce>=5.12.0",
+
+    # Task-specific libraries
+    "pandas>=2.3.3",
+    "psycopg[binary]>=3.3.2",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.setuptools]
+py-modules = []

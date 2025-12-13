@@ -1,6 +1,7 @@
 [tools]
+claude = "latest"
 pre-commit = "latest"
-python = "latest"
+python = "3.11"
 uv = "latest"
 
 [hooks]
