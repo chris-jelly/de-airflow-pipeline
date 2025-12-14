@@ -178,6 +178,7 @@ See `KUBERNETES.md` for complete examples.
 ## Future Considerations
 
 If security requirements increase, we could:
+- Migrate from environment variables to volume-mounted secrets (secrets as files at `/secrets/<name>/`) - this reduces exposure via `kubectl describe`, crash dumps, and `/proc/<pid>/environ`
 - Migrate to CSI secret driver for memory-only secret mounting
 - Use workload identity for cloud service credentials (PostgreSQL, etc.)
 - Implement secret rotation monitoring and alerting

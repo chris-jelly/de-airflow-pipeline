@@ -1,0 +1,129 @@
+# Airflow Helm chart values for local k3d development
+# Minimal configuration with KubernetesExecutor
+
+# Airflow executor
+executor: "KubernetesExecutor"
+
+# Airflow images
+images:
+  airflow:
+    repository: apache/airflow
+    tag: "2.8.1-python3.11"
+    pullPolicy: IfNotPresent
+
+# Airflow configuration
+config:
+  core:
+    dags_folder: /dags
+    load_examples: "False"
+  kubernetes_executor:
+    namespace: airflow
+    worker_container_repository: apache/airflow
+    worker_container_tag: "2.8.1-python3.11"
+
+# DAGs configuration - mount from host
+dags:
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: false
+
+# Mount host DAGs directory
+extraVolumes:
+  - name: dags
+    hostPath:
+      path: /dags
+      type: Directory
+
+extraVolumeMounts:
+  - name: dags
+    mountPath: /dags
+    readOnly: true
+
+# Scheduler configuration
+scheduler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # Set environment variable for custom DAG image
+  env:
+    - name: SALESFORCE_DAG_IMAGE
+      value: "k3d-registry.localhost:5111/de-airflow-pipeline-salesforce:latest"
+
+# Webserver configuration
+webserver:
+  replicas: 1
+  service:
+    type: NodePort
+    ports:
+      - name: airflow-ui
+        port: 8080
+        nodePort: 30080
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    password: admin
+    email: admin@example.com
+    firstName: Admin
+    lastName: User
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# PostgreSQL (Airflow metadata database)
+postgresql:
+  enabled: true
+  auth:
+    enablePostgresUser: true
+    postgresPassword: airflow
+    username: airflow
+    password: airflow
+    database: airflow
+  primary:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# Disable unnecessary components
+triggerer:
+  enabled: false
+
+flower:
+  enabled: false
+
+statsd:
+  enabled: false
+
+pgbouncer:
+  enabled: false
+
+redis:
+  enabled: false
+
+# RBAC for KubernetesExecutor
+rbac:
+  create: true
+  createSCCRoleBinding: false
+
+serviceAccount:
+  create: true
+  name: airflow
+
+# Enable pod logs
+logs:
+  persistence:
+    enabled: false

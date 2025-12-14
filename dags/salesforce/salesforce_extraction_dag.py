@@ -28,7 +28,10 @@ executor_config = {
             containers=[
                 k8s.V1Container(
                     name="base",
-                    image="ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
+                    image=os.getenv(
+                        "SALESFORCE_DAG_IMAGE",
+                        "ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
+                    ),
                     # Mount secrets as environment variables only for this DAG's pods
                     env=[
                         # Salesforce OAuth credentials - only for this DAG

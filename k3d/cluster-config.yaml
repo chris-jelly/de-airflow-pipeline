@@ -1,0 +1,42 @@
+# k3d cluster configuration for local Airflow development
+# Creates a 3-node cluster with local registry and volume mounts
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: airflow-dev
+servers: 1
+agents: 2
+image: rancher/k3s:v1.28.5-k3s1
+
+# Local Docker registry for DAG images
+registries:
+  create:
+    name: k3d-registry.localhost
+    host: "0.0.0.0"
+    hostPort: "5111"
+
+# Port mappings for Airflow UI
+ports:
+  - port: 30080:30080
+    nodeFilters:
+      - server:0
+
+# Volume mounts for live DAG editing
+volumes:
+  - volume: ${PWD}/dags:/dags
+    nodeFilters:
+      - server:0
+      - agent:*
+
+options:
+  k3d:
+    wait: true
+    timeout: "60s"
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true
