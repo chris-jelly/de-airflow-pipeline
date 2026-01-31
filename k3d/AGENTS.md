@@ -10,3 +10,9 @@
 ## Helm Configuration
 - For `KubernetesExecutor` local development, use `podTemplate` value to inject `hostPath` volumes into worker pods. Top-level `extraVolumes` only apply to Scheduler/Webserver.
 - Ensure `postgresql.auth` credentials match `data.metadataConnection` in the values file.
+
+## Image Registry & Tagging
+- The local registry is available at `localhost:5111` (host) and `k3d-registry.localhost:5000` (cluster).
+- Tag images as `localhost:5111/name:tag` for pushing from the host.
+- Inside the cluster, images can be pulled from the registry or loaded directly via `k3d image import` (though registry is preferred for this pipeline).
+- When using `docker build` for DAGs, run from the `REPO_ROOT` context to include shared configuration if needed, even if the Dockerfile is in `dags/{type}`.
