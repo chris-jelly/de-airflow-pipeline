@@ -1,3 +1,74 @@
+# Ralph Progress Log
+## Codebase Patterns
+- Scripts in `k3d/scripts/` should use `#!/bin/bash` and `set -euo pipefail`.
+- Version checks can use `sort -V` for semantic versioning comparison.
+- When using `grep` in scripts with `pipefail`, use `|| true` if no matches is a valid state.
+- Network verification scripts should use a transient `busybox` pod to verify DNS and external connectivity.
+- Resource checks can query node conditions (MemoryPressure, DiskPressure, PIDPressure) via `kubectl get nodes -o jsonpath`.
+- Registry images should be tagged `localhost:5111/name:tag` for pushing from the host.
+- Helm values files cannot use templates (e.g., `{{ .Release.Name }}`).
+- Use `useHelmHooks: false` for migration jobs when using `helm install --wait` to avoid deadlocks.
+- Airflow API requires explicit `airflow.api.auth.backend.basic_auth` for Basic Auth access.
+- `extraVolumes` in Airflow Helm Chart must be defined per-component (scheduler, webserver, triggerer), not globally.
+- DAG top-level imports must be safe (no 3rd party libs like pandas); use Lazy Import Pattern inside functions.
+- Use `.airflowignore` (Regex) to exclude `.venv` when mounting repo root as DAGs folder.
+
+Started: Sat 31 Jan 2026 10:10:22 AM EST
+---
+## 2026-01-31 - US-001
+- Implemented `k3d/scripts/toolchain-validate.sh` to check for k3d, kubectl, helm.
+- Validated versions and existence of `k3d/cluster-config.yaml`.
+- Files changed: `k3d/scripts/toolchain-validate.sh`
+- **Learnings for future iterations:**
+  - `k3d/cluster-config.yaml` already exists with a full configuration.
+  - `k3d` directory contains manifests and scripts for the local environment.
+---
+## 2026-01-31 - US-002
+- Implemented `k3d/scripts/cluster-create.sh` to create cluster and validate it.
+- Files changed: `k3d/scripts/cluster-create.sh`, `k3d/AGENTS.md`
+- **Learnings for future iterations:**
+  - `k3d` registry runs on host port 5111 (configured in `cluster-config.yaml`).
+  - `k3d` scripts should handle re-run gracefully (check existence before creating).
+  - Use `kubectl get nodes --no-headers | grep -v "Ready" | wc -l || true` to safely count non-ready nodes.
+---
+## 2026-01-31 - US-003
+- Implemented `k3d/scripts/cluster-verify.sh` to validate cluster readiness.
+- Validated context, node readiness, resource pressure, internal/external DNS, and pod execution.
+- Files changed: `k3d/scripts/cluster-verify.sh`, `k3d/AGENTS.md`
+- **Learnings for future iterations:**
+  - Using a transient `busybox` pod is effective for one-off network tests.
+  - Checking `conditions` in node status is better than parsing `kubectl describe`.
+  - `kubectl wait` is essential for avoiding race conditions when launching pods.
+---
+## 2026-01-31 - US-004
+- Created `k3d/values-airflow.yaml` with configuration for KubernetesExecutor, hostPath mounts, and embedded Postgres.
+- Configured `podTemplate` to ensure workers inherit the `hostPath` volume for hot-reloading.
+- Files changed: `k3d/values-airflow.yaml`, `k3d/AGENTS.md`
+- **Learnings for future iterations:**
+  - Standard `extraVolumes` in Airflow Helm chart do not apply to KubernetesExecutor workers; `podTemplate` is required.
+  - `postgresql.auth` and `data.metadataConnection` must be synchronized in values file.
+---
+## 2026-01-31 - US-005
+- Implemented `k3d/scripts/image-load.sh` to build and push DAG images to the local registry (port 5111).
+- Updated script to support multiple DAG types and proper error handling.
+- Used `docker push` instead of `k3d image import` to leverage the registry created in US-002.
+- Files changed: `k3d/scripts/image-load.sh`, `k3d/AGENTS.md`
+- **Learnings for future iterations:**
+  - PRD mentioned `localhost:30080` (UI port) but registry is `5111`.
+  - `k3d image import` bypasses registry, but we used registry to align with US-002.
+  - Docker build context must be `REPO_ROOT` to include `pyproject.toml` correctly.
+---
+## 2026-01-31 - US-006
+- Implemented `k3d/scripts/deploy-airflow.sh` to deploy Airflow via Helm with rollback capability.
+- Updated `k3d/values-airflow.yaml` to fix PostgreSQL image tag (`latest`), hostname resolution, and migration job deadlock.
+- Validated deployment works and Airflow UI is accessible at `http://localhost:30080`.
+- Files changed: `k3d/scripts/deploy-airflow.sh`, `k3d/values-airflow.yaml`, `k3d/AGENTS.md`
+- **Learnings for future iterations:**
+  - `helm install --wait` creates a deadlock with `post-install` hooks (like migration job) if pods depend on the hook (via init container). Solution: `useHelmHooks: false`.
+  - `{{ .Release.Name }}` cannot be used in `values.yaml` files.
+  - Bitnami PostgreSQL images have specific tagging; `latest` was used as a workaround for local dev.
+  - Airflow chart 1.12.0 schema validation failures (`workers.enabled`, `createUserJob.enabled`).
+---
 ## 2026-01-31 - US-007
 - Implemented `k3d/scripts/airflow-verify.sh` to validate Airflow deployment and DAG discovery.
 - Updated `k3d/values-airflow.yaml` to enable Basic Auth for API and fix `hostPath` volume mounts (moved to component sections).
