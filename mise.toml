@@ -1,5 +1,9 @@
 [tools]
 claude = "latest"
+helm = "latest"
+k3d = "latest"
+k9s = "latest"
+kubectl = "latest"
 pre-commit = "latest"
 uv = "latest"
 
