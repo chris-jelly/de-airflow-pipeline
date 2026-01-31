@@ -23,3 +23,9 @@
 - Validating keys: `workers.enabled` and `createUserJob.enabled` are not valid in this chart version.
 - Bitnami PostgreSQL images for local dev: verify tag availability. `latest` works for local `k3d`, but specific versions like `16.1.0` might be missing from public repos or require specific `debian` suffix combinations.
 
+## Airflow Configuration
+- **API Authentication:** Default is `session`. To use Basic Auth (e.g., for curl/scripts), set `config.api.auth_backends` to `airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session`.
+- **Volume Mounts:** `extraVolumes` and `extraVolumeMounts` must be defined under each component section (`scheduler`, `webserver`, `triggerer`) in `values.yaml`. Top-level definitions are ignored by the chart.
+- **DAG Parsing:** Scheduler runs the default Airflow image. Ensure DAG top-level code does not import libraries (like `pandas`) not present in the base image. Use the Lazy Import Pattern.
+- **Ignore Files:** Use `.airflowignore` with Regex patterns (e.g. `\.venv`) to exclude local virtual environments from DAG scanning to avoid recursive loop errors.
+

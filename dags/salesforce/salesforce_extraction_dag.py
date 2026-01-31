@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 from airflow import DAG
-from airflow.providers.standard.operators.python import PythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.models import Variable
 from kubernetes.client import models as k8s
-import pandas as pd
 import json
 import os
 
@@ -126,6 +125,7 @@ def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
     # Import providers at runtime (available in worker pod)
     from airflow.providers.postgres.hooks.postgres import PostgresHook
     from airflow.providers.salesforce.hooks.salesforce import SalesforceHook
+    import pandas as pd
 
     # Access environment variables (injected into pod via executor_config)
     postgres_host = os.getenv("POSTGRES_HOST")
