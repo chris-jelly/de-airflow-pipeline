@@ -37,7 +37,7 @@
         "Cluster name defaults to airflow-dev for consistency"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -55,7 +55,7 @@
         "Provides clear output for each verification step"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

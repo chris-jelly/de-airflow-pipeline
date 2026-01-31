@@ -1,7 +1,10 @@
 # Ralph Progress Log
 ## Codebase Patterns
-- Scripts in `k3d/scripts/` should use `#!/bin/bash` and `set -e`.
+- Scripts in `k3d/scripts/` should use `#!/bin/bash` and `set -euo pipefail`.
 - Version checks can use `sort -V` for semantic versioning comparison.
+- When using `grep` in scripts with `pipefail`, use `|| true` if no matches is a valid state.
+- Network verification scripts should use a transient `busybox` pod to verify DNS and external connectivity.
+- Resource checks can query node conditions (MemoryPressure, DiskPressure, PIDPressure) via `kubectl get nodes -o jsonpath`.
 
 Started: Sat 31 Jan 2026 10:10:22 AM EST
 ---
@@ -12,4 +15,21 @@ Started: Sat 31 Jan 2026 10:10:22 AM EST
 - **Learnings for future iterations:**
   - `k3d/cluster-config.yaml` already exists with a full configuration.
   - `k3d` directory contains manifests and scripts for the local environment.
+---
+## 2026-01-31 - US-002
+- Implemented `k3d/scripts/cluster-create.sh` to create cluster and validate it.
+- Files changed: `k3d/scripts/cluster-create.sh`, `k3d/AGENTS.md`
+- **Learnings for future iterations:**
+  - `k3d` registry runs on host port 5111 (configured in `cluster-config.yaml`).
+  - `k3d` scripts should handle re-run gracefully (check existence before creating).
+  - Use `kubectl get nodes --no-headers | grep -v "Ready" | wc -l || true` to safely count non-ready nodes.
+---
+## 2026-01-31 - US-003
+- Implemented `k3d/scripts/cluster-verify.sh` to validate cluster readiness.
+- Validated context, node readiness, resource pressure, internal/external DNS, and pod execution.
+- Files changed: `k3d/scripts/cluster-verify.sh`, `k3d/AGENTS.md`
+- **Learnings for future iterations:**
+  - Using a transient `busybox` pod is effective for one-off network tests.
+  - Checking `conditions` in node status is better than parsing `kubectl describe`.
+  - `kubectl wait` is essential for avoiding race conditions when launching pods.
 ---
