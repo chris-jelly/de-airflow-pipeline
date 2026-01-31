@@ -1,0 +1,139 @@
+{
+  "project": "de-airflow-pipeline",
+  "branchName": "ralph/local-k3d-airflow-env",
+  "description": "Create a local Kubernetes development environment using k3d for fast Airflow DAG iteration with production-parity infrastructure",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Validate k3d toolchain installation",
+      "description": "As a developer, I want to verify k3d, kubectl, and helm are installed with correct versions so the local Airflow environment can be created",
+      "acceptanceCriteria": [
+        "Create validation script at k3d/scripts/toolchain-validate.sh",
+        "Script checks k3d, kubectl, and helm are installed and executable",
+        "Script validates minimum version requirements (k3d v5.0+, kubectl v1.25+, helm v3.0+)",
+        "Script confirms k3d/cluster-config.yaml and scripts exist",
+        "Script returns non-zero exit code on any validation failure",
+        "Script prints helpful error messages with installation guidance",
+        "Script has execute permissions and shebang with /bin/bash",
+        "Script outputs clear, timestamped messages for debugging"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create k3d cluster with registry",
+      "description": "As a developer, I want to create a local k3d cluster with an embedded registry so DAG images can be loaded without external services",
+      "acceptanceCriteria": [
+        "Implement k3d/scripts/cluster-create.sh script",
+        "Script creates k3d cluster using k3d/cluster-config.yaml",
+        "Cluster includes embedded container registry",
+        "Cluster exposes NodePort for registry access on ports 30000-30007",
+        "Post-creation validation confirms nodes are Ready",
+        "Post-creation validation confirms registry is accessible",
+        "Script handles cluster already exists gracefully",
+        "Script provides cluster name and context information",
+        "Cluster name defaults to airflow-dev for consistency"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Verify cluster readiness for Airflow",
+      "description": "As a developer, I want to validate the k3d cluster is fully operational and network-ready before deploying Airflow workflows",
+      "acceptanceCriteria": [
+        "Create verification script at k3d/scripts/cluster-verify.sh",
+        "Script validates current kubecontext points to k3d cluster",
+        "Script confirms all nodes are Ready status",
+        "Script deploys and deletes test pod to validate networking",
+        "Script verifies CoreDNS is functional with test DNS lookup",
+        "Script checks cluster has sufficient resources (CPU/memory)",
+        "Returns zero exit only when all checks pass",
+        "Provides clear output for each verification step"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Configure Airflow Helm values for local development",
+      "description": "As a developer, I want Airflow configured with dev-friendly settings so I can quickly iterate on DAGs without complex setup",
+      "acceptanceCriteria": [
+        "Create k3d/values-airflow.yaml with development defaults",
+        "Configure hostPath volume mount for dags/ directory from repository root",
+        "Configure Airflow webserver access via NodePort on port 30080",
+        "Use embedded Postgres database for Airflow metadata (local only)",
+        "Configure executor to use KubernetesExecutor",
+        "Set worker image to use DAG-specific images per DAG configuration",
+        "Disable Celery broker (using internal KubernetesExecutor communication)",
+        "Include comments explaining each configuration section",
+        "Document differences from production setup in Helm values file"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Build and load DAG images to k3d registry",
+      "description": "As a developer, I want to build DAG container images and load them into the local registry so Airflow can run tasks with the correct dependencies",
+      "acceptanceCriteria": [
+        "Create k3d/scripts/image-load.sh script",
+        "Script accepts DAG type argument (e.g. salesforce, dbt)",
+        "Script builds Docker image using dags/{type}/Dockerfile",
+        "Script tags image with format: localhost:30080/de-airflow-pipeline-{type}:local",
+        "Script loads image into k3d registry using k3d image import",
+        "Script validates image exists in registry after loading",
+        "Script supports loading multiple DAG types via script arguments",
+        "Script provides progress feedback for each build"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Deploy Airflow to k3d via Helm",
+      "description": "As a developer, I want to deploy Airflow using a single script that handles Helm repo configuration and chart installation so I can get Airflow running quickly",
+      "acceptanceCriteria": [
+        "Create k3d/scripts/deploy-airflow.sh script",
+        "Script adds Airflow Helm repository if not present",
+        "Script updates Helm repositories",
+        "Script deploys Airflow chart using values-airflow.yaml",
+        "Script handles upgrade scenario (helm upgrade if release exists, install if not)",
+        "Script uses Apache Airflow official chart with version pinned to major version",
+        "Script waits for pods to become Ready with 5-minute timeout",
+        "Script displays deployment status and pod information",
+        "Script provides Airflow UI URL after successful deployment",
+        "Script provides rollback command on failure"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Verify Airflow UI and DAG discovery",
+      "description": "As a developer, I want to access the Airflow UI locally and confirm DAGs are discovered from the mounted directory so I can test pipeline execution",
+      "acceptanceCriteria": [
+        "Create k3d/scripts/airflow-verify.sh script",
+        "Script validates Airflow webserver pod is Ready",
+        "Script validates Airflow scheduler pod is Ready",
+        "Script validates at least two worker pods are Ready (KubernetesExecutor)",
+        "Script tests Airflow UI accessibility at http://localhost:30080",
+        "Script verifies default admin credentials work",
+        "Script checks DAG list API returns loaded DAGs from dags/ directory",
+        "Script outputs verification status with pass/fail for each check",
+        "Returns non-zero exit if any critical check fails",
+        "Provides next steps for manual verification"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+# Ralph Progress Log
+## Codebase Patterns
+- Scripts in `k3d/scripts/` should use `#!/bin/bash` and `set -e`.
+- Version checks can use `sort -V` for semantic versioning comparison.
+
+Started: Sat 31 Jan 2026 10:10:22 AM EST
+---
+## 2026-01-31 - US-001
+- Implemented `k3d/scripts/toolchain-validate.sh` to check for k3d, kubectl, helm.
+- Validated versions and existence of `k3d/cluster-config.yaml`.
+- Files changed: `k3d/scripts/toolchain-validate.sh`
+- **Learnings for future iterations:**
+  - `k3d/cluster-config.yaml` already exists with a full configuration.
+  - `k3d` directory contains manifests and scripts for the local environment.
+---
