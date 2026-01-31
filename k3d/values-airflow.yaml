@@ -7,6 +7,16 @@
 # 3. NodePort exposure for easy UI access
 # 4. Embedded PostgreSQL for standalone operation
 
+# Ensure migration job runs as a regular resource (not a hook) to avoid deadlock with embedded postgres
+migrateDatabaseJob:
+  enabled: true
+  useHelmHooks: false
+
+# Ensure admin user is created
+createUserJob:
+  useHelmHooks: true
+  applyCustomEnv: false
+
 # ------------------------------------------------------------------------------
 # Executor Configuration
 # ------------------------------------------------------------------------------
@@ -33,6 +43,8 @@ images:
 # In production, this should be disabled in favor of an external database (e.g., RDS).
 postgresql:
   enabled: true
+  image:
+    tag: latest
   auth:
     username: airflow
     password: airflow
@@ -44,7 +56,7 @@ data:
     user: airflow
     pass: airflow
     protocol: postgresql
-    host: "{{ .Release.Name }}-postgresql"
+    host: airflow-postgresql
     port: 5432
     db: airflow
 
@@ -97,8 +109,8 @@ flower:
   enabled: false
 redis:
   enabled: false
-workers:
-  enabled: false
+# workers:
+#   enabled: false
 
 # ------------------------------------------------------------------------------
 # Airflow Configuration

@@ -74,7 +74,7 @@
         "Document differences from production setup in Helm values file"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -92,7 +92,7 @@
         "Script provides progress feedback for each build"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -112,7 +112,7 @@
         "Script provides rollback command on failure"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

@@ -16,3 +16,10 @@
 - Tag images as `localhost:5111/name:tag` for pushing from the host.
 - Inside the cluster, images can be pulled from the registry or loaded directly via `k3d image import` (though registry is preferred for this pipeline).
 - When using `docker build` for DAGs, run from the `REPO_ROOT` context to include shared configuration if needed, even if the Dockerfile is in `dags/{type}`.
+
+## Helm Chart Gotchas (Airflow 1.12.0)
+- `{{ .Release.Name }}` cannot be used in `values.yaml` files. Hardcode service names or use external config management.
+- `helm upgrade --install --wait` can cause a deadlock with `post-install` hooks (like `migrateDatabaseJob`) if pods wait for the hook (via init containers). Set `migrateDatabaseJob.useHelmHooks: false` to run the job as a standard resource.
+- Validating keys: `workers.enabled` and `createUserJob.enabled` are not valid in this chart version.
+- Bitnami PostgreSQL images for local dev: verify tag availability. `latest` works for local `k3d`, but specific versions like `16.1.0` might be missing from public repos or require specific `debian` suffix combinations.
+
