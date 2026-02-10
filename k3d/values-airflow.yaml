@@ -1,0 +1,190 @@
+# Airflow Helm Configuration for Local k3d Development
+#
+# This configuration is optimized for a local Kubernetes environment using k3d.
+# It enables:
+# 1. KubernetesExecutor for production-like task execution
+# 2. HostPath mounting for live DAG updates (Scheduler/Webserver)
+# 3. NodePort exposure for easy UI access
+# 4. Embedded PostgreSQL for standalone operation
+
+# Ensure migration job runs as a regular resource (not a hook) to avoid deadlock with embedded postgres
+migrateDatabaseJob:
+  enabled: true
+  useHelmHooks: false
+
+# Ensure admin user is created
+# createUserJob:
+#   useHelmHooks: true
+#   applyCustomEnv: false
+
+# ------------------------------------------------------------------------------
+# Executor Configuration
+# ------------------------------------------------------------------------------
+# Use KubernetesExecutor to isolate tasks in their own pods.
+# This supports the "Lazy Import Pattern" where each task can run in a custom image.
+executor: KubernetesExecutor
+
+# ------------------------------------------------------------------------------
+# Images
+# ------------------------------------------------------------------------------
+# Base Airflow image for Scheduler and Webserver.
+# Workers will typically override this in the DAG using executor_config,
+# or fall back to this image.
+images:
+  airflow:
+    repository: apache/airflow
+    tag: 2.8.1
+    pullPolicy: IfNotPresent
+
+# ------------------------------------------------------------------------------
+# Database
+# ------------------------------------------------------------------------------
+# Use the embedded PostgreSQL subchart for local development.
+# In production, this should be disabled in favor of an external database (e.g., RDS).
+postgresql:
+  enabled: true
+  image:
+    tag: latest
+  auth:
+    username: airflow
+    password: airflow
+    database: airflow
+
+# Configure Airflow to use the internal postgres service
+data:
+  metadataConnection:
+    user: airflow
+    pass: airflow
+    protocol: postgresql
+    host: airflow-postgresql
+    port: 5432
+    db: airflow
+
+# ------------------------------------------------------------------------------
+# Scheduler Configuration
+# ------------------------------------------------------------------------------
+scheduler:
+  extraVolumes:
+    - name: dags-local
+      hostPath:
+        path: /dags
+        type: Directory
+  extraVolumeMounts:
+    - name: dags-local
+      mountPath: /opt/airflow/dags
+      readOnly: true
+
+# ------------------------------------------------------------------------------
+# Triggerer Configuration
+# ------------------------------------------------------------------------------
+triggerer:
+  extraVolumes:
+    - name: dags-local
+      hostPath:
+        path: /dags
+        type: Directory
+  extraVolumeMounts:
+    - name: dags-local
+      mountPath: /opt/airflow/dags
+      readOnly: true
+
+# ------------------------------------------------------------------------------
+# Webserver Access
+# ------------------------------------------------------------------------------
+# Expose the Airflow UI on host port 30080.
+# k3d cluster must be configured to map port 30080 to the node.
+# (See k3d/cluster-config.yaml)
+webserver:
+  extraVolumes:
+    - name: dags-local
+      hostPath:
+        path: /dags
+        type: Directory
+  extraVolumeMounts:
+    - name: dags-local
+      mountPath: /opt/airflow/dags
+      readOnly: true
+  service:
+    type: NodePort
+    ports:
+      - name: airflow-ui
+        port: 8080
+        nodePort: 30080
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    password: admin
+    email: admin@example.com
+    firstName: Admin
+    lastName: User
+
+
+# ------------------------------------------------------------------------------
+# DAGs Mounting (Hot Reloading)
+# ------------------------------------------------------------------------------
+# Mount the local 'dags/' directory into the containers to allow
+# parsing DAGs without rebuilding images.
+# Note: k3d maps the host's 'dags/' folder to '/dags' on the node.
+# We then mount '/dags' (node) to '/opt/airflow/dags' (container).
+
+dags:
+  persistence:
+    # Disable PVC persistence for DAGs as we use hostPath
+    enabled: false
+  gitSync:
+    enabled: false
+
+# Apply volumes to Scheduler, Webserver, and Triggerer
+# Moved to individual sections
+
+# ------------------------------------------------------------------------------
+# Worker Configuration
+# ------------------------------------------------------------------------------
+# Disable Celery components as we are using KubernetesExecutor.
+flower:
+  enabled: false
+redis:
+  enabled: false
+# workers:
+#   enabled: false
+
+# ------------------------------------------------------------------------------
+# Airflow Configuration
+# ------------------------------------------------------------------------------
+config:
+  core:
+    load_examples: 'False'
+    exposed_config: 'True'
+    # Ensure DAGs are picked up from the mounted directory
+    dags_folder: /opt/airflow/dags
+  api:
+    auth_backends: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+  logging:
+    logging_level: INFO
+  kubernetes:
+    # Ensure workers delete themselves after finishing to save resources
+    delete_worker_pods: 'True'
+
+# ------------------------------------------------------------------------------
+# KubernetesExecutor Pod Template
+# ------------------------------------------------------------------------------
+# To ensure workers also have the DAGs volume mounted (so they use local code),
+# we inject the volume mount into the default pod template.
+podTemplate: |
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: dummy-name
+  spec:
+    containers:
+      - name: base
+        volumeMounts:
+          - name: dags-local
+            mountPath: /opt/airflow/dags
+            readOnly: true
+    volumes:
+      - name: dags-local
+        hostPath:
+          path: /dags
+          type: Directory

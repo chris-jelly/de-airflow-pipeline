@@ -1,0 +1,76 @@
+# Target PostgreSQL database for data warehouse (bronze layer)
+# This is separate from Airflow's metadata database
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-target
+  namespace: airflow
+  labels:
+    app: postgres-target
+spec:
+  ports:
+    - port: 5432
+      name: postgres
+  clusterIP: None
+  selector:
+    app: postgres-target
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-target
+  namespace: airflow
+spec:
+  serviceName: postgres-target
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-target
+  template:
+    metadata:
+      labels:
+        app: postgres-target
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: database
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

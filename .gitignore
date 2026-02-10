@@ -183,3 +183,8 @@ standalone_admin_password.txt
 *.parquet
 *.json
 data/
+
+# k3d secrets (keep templates)
+k3d/manifests/secrets/*.yaml
+!k3d/manifests/secrets/*.yaml.template
+!k3d/manifests/secrets/README.md
