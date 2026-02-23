@@ -156,7 +156,7 @@ executor_config = {
 
 **How it works:**
 1. Airflow reads `AIRFLOW_CONN_*` env vars to populate its connection registry at startup
-2. DAG code uses `PostgresHook(postgres_conn_id="warehouse_postgres_dev")` — the standard API
+2. DAG code uses `PostgresHook(postgres_conn_id="warehouse_postgres")` — the standard API
 3. The env var is only present in executor pods, not in scheduler/webserver (ADR-002)
 
 **Required Kubernetes secret formats:**

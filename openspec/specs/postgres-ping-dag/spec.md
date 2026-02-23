@@ -12,7 +12,7 @@ The system SHALL provide a DAG named `postgres_ping` that validates Postgres dat
 #### Scenario: Successful Postgres ping
 
 - **WHEN** the `postgres_ping` DAG executes its ping task
-- **THEN** the task SHALL connect to the warehouse Postgres using the environment-specific connection ID (e.g., `warehouse_postgres_dev`), execute `SELECT 1`, and log the result along with the current server timestamp
+- **THEN** the task SHALL connect to the warehouse Postgres using the `warehouse_postgres` connection ID, execute `SELECT 1`, and log the result along with the current server timestamp
 
 #### Scenario: Connection failure
 

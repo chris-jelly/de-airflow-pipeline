@@ -11,12 +11,10 @@ Runs on the base apache/airflow image — no custom container required.
 from datetime import datetime, timedelta
 
 from airflow.decorators import dag, task
-from airflow.models import Variable
 from kubernetes.client import models as k8s
 
-# Resolve environment at parse time (lightweight — no provider imports)
-env = Variable.get("environment", default_var="dev")
-postgres_conn_id = f"warehouse_postgres_{env}"
+# Connection IDs — single environment, no suffix (see ADR: consolidated dev/prod)
+postgres_conn_id = "warehouse_postgres"
 
 # Pod override: mount AIRFLOW_CONN_WAREHOUSE_POSTGRES from K8s secret (ADR-002)
 executor_config = {

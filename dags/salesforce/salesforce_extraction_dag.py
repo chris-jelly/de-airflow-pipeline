@@ -13,13 +13,11 @@ Uses:
 from datetime import datetime, timedelta, timezone
 
 from airflow.decorators import dag, task
-from airflow.models import Variable
 from kubernetes.client import models as k8s
 
-# Resolve environment at parse time (lightweight — no provider imports)
-env = Variable.get("environment", default_var="dev")
-postgres_conn_id = f"warehouse_postgres_{env}"
-salesforce_conn_id = f"salesforce_{env}"
+# Connection IDs — single environment, no suffix (see ADR: consolidated dev/prod)
+postgres_conn_id = "warehouse_postgres"
+salesforce_conn_id = "salesforce"
 
 # KubernetesExecutor configuration — mount AIRFLOW_CONN_* env vars from K8s secrets
 # SECURITY: Secrets are mounted ONLY in executor pods for this DAG, not globally (ADR-002)

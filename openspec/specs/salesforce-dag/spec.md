@@ -33,10 +33,10 @@ All hooks SHALL be instantiated using Airflow Connection `conn_id` references in
 - **WHEN** a task needs to connect to Salesforce
 - **THEN** it SHALL instantiate `SalesforceHook` with a `salesforce_conn_id` parameter referencing an Airflow Connection, not with individual `consumer_key`, `consumer_secret`, `domain` parameters
 
-#### Scenario: Connection IDs are environment-aware
+#### Scenario: Connection IDs use static names
 
 - **WHEN** the DAG resolves connection IDs
-- **THEN** the connection IDs SHALL incorporate the environment variable (e.g., `warehouse_postgres_dev`, `salesforce_dev`) to support environment-specific configurations
+- **THEN** the connection IDs SHALL be static strings (`warehouse_postgres`, `salesforce`) matching the `AIRFLOW_CONN_*` env vars mounted in executor pods
 
 ### Requirement: Pod override with AIRFLOW_CONN env vars
 
