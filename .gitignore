@@ -188,3 +188,6 @@ data/
 k3d/manifests/secrets/*.yaml
 !k3d/manifests/secrets/*.yaml.template
 !k3d/manifests/secrets/README.md
+
+# opencode
+.opencode

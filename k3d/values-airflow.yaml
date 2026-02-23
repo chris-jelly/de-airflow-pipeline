@@ -33,7 +33,7 @@ executor: KubernetesExecutor
 images:
   airflow:
     repository: apache/airflow
-    tag: 2.8.1
+    tag: 3.1.5-python3.13
     pullPolicy: IfNotPresent
 
 # ------------------------------------------------------------------------------
@@ -158,11 +158,9 @@ config:
     exposed_config: 'True'
     # Ensure DAGs are picked up from the mounted directory
     dags_folder: /opt/airflow/dags
-  api:
-    auth_backends: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
   logging:
     logging_level: INFO
-  kubernetes:
+  kubernetes_executor:
     # Ensure workers delete themselves after finishing to save resources
     delete_worker_pods: 'True'
 

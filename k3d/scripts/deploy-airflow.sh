@@ -53,10 +53,10 @@ helm repo update
 
 # Deploy Airflow
 echo "Installing/Upgrading Airflow..."
-# Using version 1.12.0 (matches Airflow 2.8.1)
+# Using version 1.19.0 (matches Airflow 3.x)
 helm upgrade --install airflow apache-airflow/airflow \
     --namespace airflow \
-    --version 1.12.0 \
+    --version 1.19.0 \
     --values "$PROJECT_ROOT/k3d/values-airflow.yaml" \
     --timeout 5m \
     --wait

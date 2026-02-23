@@ -64,7 +64,7 @@ dependencies = [
 Create `Dockerfile.<dag-type>`:
 
 ```dockerfile
-FROM apache/airflow:2.8.1-python3.11
+FROM apache/airflow:3.1.5-python3.13
 
 USER root
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -128,7 +128,7 @@ images:
   airflow:
     # Core components use official Airflow image
     repository: apache/airflow
-    tag: 2.8.1-python3.11
+    tag: 3.1.5-python3.13
     pullPolicy: IfNotPresent
 
 # Executor pods will use DAG-specific images via executor_config
@@ -168,7 +168,7 @@ Example base image pattern:
 
 ```dockerfile
 # Dockerfile.base - shared dependencies
-FROM apache/airflow:2.8.1-python3.11
+FROM apache/airflow:3.1.5-python3.13
 # ... install common deps ...
 
 # Dockerfile.salesforce

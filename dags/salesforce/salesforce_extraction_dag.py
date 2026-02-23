@@ -1,96 +1,60 @@
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
-from airflow import DAG
-from airflow.operators.python import PythonOperator
+"""Salesforce to PostgreSQL extraction DAG.
+
+Extracts Account, Opportunity, and Contact objects from Salesforce
+and loads them into a PostgreSQL bronze schema.
+
+Uses:
+- TaskFlow API (@dag / @task decorators)
+- conn_id-based hooks (AIRFLOW_CONN_* env vars mounted in executor pods)
+- Lazy import pattern (provider hooks + pandas imported inside tasks only)
+- ADR-002 pod-level secret isolation via executor_config
+"""
+
+from datetime import datetime, timedelta, timezone
+
+from airflow.decorators import dag, task
 from airflow.models import Variable
 from kubernetes.client import models as k8s
-import json
-import os
 
-# Type hints only - not executed at runtime
-if TYPE_CHECKING:
-    pass
-
-# Get environment (you can set this as an Airflow Variable)
-env = Variable.get("environment", default_var="dev")  # or "prod"
-
-# Use environment-specific connections
+# Resolve environment at parse time (lightweight — no provider imports)
+env = Variable.get("environment", default_var="dev")
 postgres_conn_id = f"warehouse_postgres_{env}"
 salesforce_conn_id = f"salesforce_{env}"
 
-# KubernetesExecutor configuration - specify custom image and secrets for this DAG
-# SECURITY: Secrets are mounted ONLY in executor pods for this DAG, not globally
-# This follows the principle of least privilege - scheduler/webserver don't get these credentials
+# KubernetesExecutor configuration — mount AIRFLOW_CONN_* env vars from K8s secrets
+# SECURITY: Secrets are mounted ONLY in executor pods for this DAG, not globally (ADR-002)
+#
+# Required Kubernetes secrets (managed in homelab repo):
+#   warehouse-postgres-conn:
+#     AIRFLOW_CONN_WAREHOUSE_POSTGRES: "postgresql://user:pass@host:5432/dbname"
+#   salesforce-conn:
+#     AIRFLOW_CONN_SALESFORCE: '{"conn_type":"salesforce","extra":{"consumer_key":"...","private_key":"...","domain":"login"}}'
 executor_config = {
     "pod_override": k8s.V1Pod(
         spec=k8s.V1PodSpec(
             containers=[
                 k8s.V1Container(
                     name="base",
-                    image=os.getenv(
-                        "SALESFORCE_DAG_IMAGE",
-                        "ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
-                    ),
-                    # Mount secrets as environment variables only for this DAG's pods
+                    image="ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
                     env=[
-                        # Salesforce OAuth credentials - only for this DAG
                         k8s.V1EnvVar(
-                            name="SALESFORCE_CONSUMER_KEY",
+                            name="AIRFLOW_CONN_WAREHOUSE_POSTGRES",
                             value_from=k8s.V1EnvVarSource(
                                 secret_key_ref=k8s.V1SecretKeySelector(
-                                    name="salesforce-credentials",
-                                    key="consumer_key",
+                                    name="warehouse-postgres-conn",
+                                    key="AIRFLOW_CONN_WAREHOUSE_POSTGRES",
                                 )
                             ),
                         ),
                         k8s.V1EnvVar(
-                            name="SALESFORCE_CONSUMER_SECRET",
+                            name="AIRFLOW_CONN_SALESFORCE",
                             value_from=k8s.V1EnvVarSource(
                                 secret_key_ref=k8s.V1SecretKeySelector(
-                                    name="salesforce-credentials",
-                                    key="consumer_secret",
+                                    name="salesforce-conn",
+                                    key="AIRFLOW_CONN_SALESFORCE",
                                 )
                             ),
                         ),
-                        k8s.V1EnvVar(name="SALESFORCE_DOMAIN", value="login"),
-                        # PostgreSQL credentials - shared with other DAGs that need it
-                        k8s.V1EnvVar(
-                            name="POSTGRES_HOST",
-                            value_from=k8s.V1EnvVarSource(
-                                secret_key_ref=k8s.V1SecretKeySelector(
-                                    name="postgres-credentials",
-                                    key="host",
-                                )
-                            ),
-                        ),
-                        k8s.V1EnvVar(
-                            name="POSTGRES_DATABASE",
-                            value_from=k8s.V1EnvVarSource(
-                                secret_key_ref=k8s.V1SecretKeySelector(
-                                    name="postgres-credentials",
-                                    key="database",
-                                )
-                            ),
-                        ),
-                        k8s.V1EnvVar(
-                            name="POSTGRES_USER",
-                            value_from=k8s.V1EnvVarSource(
-                                secret_key_ref=k8s.V1SecretKeySelector(
-                                    name="postgres-credentials",
-                                    key="username",
-                                )
-                            ),
-                        ),
-                        k8s.V1EnvVar(
-                            name="POSTGRES_PASSWORD",
-                            value_from=k8s.V1EnvVarSource(
-                                secret_key_ref=k8s.V1SecretKeySelector(
-                                    name="postgres-credentials",
-                                    key="password",
-                                )
-                            ),
-                        ),
-                        k8s.V1EnvVar(name="POSTGRES_PORT", value="5432"),
                     ],
                 )
             ]
@@ -98,178 +62,118 @@ executor_config = {
     )
 }
 
-default_args = {
-    "owner": "data-team",
-    "depends_on_past": False,
-    "start_date": datetime(2024, 1, 1),
-    "email_on_failure": False,
-    "email_on_retry": False,
-    "retries": 2,
-    "retry_delay": timedelta(minutes=5),
-    "executor_config": executor_config,  # Apply to all tasks in this DAG
-}
 
-dag = DAG(
-    "salesforce_extraction",
-    default_args=default_args,
+@dag(
+    dag_id="salesforce_extraction",
     description="Extract Salesforce data to PostgreSQL bronze layer",
     schedule="@daily",
+    start_date=datetime(2024, 1, 1),
     catchup=False,
     max_active_runs=1,
+    default_args={
+        "owner": "data-team",
+        "depends_on_past": False,
+        "email_on_failure": False,
+        "email_on_retry": False,
+        "retries": 2,
+        "retry_delay": timedelta(minutes=5),
+    },
 )
+def salesforce_extraction():
+    @task(task_id="create_bronze_schema", executor_config=executor_config)
+    def create_bronze_schema():
+        """Create bronze schema in PostgreSQL."""
+        from airflow.providers.postgres.hooks.postgres import PostgresHook
 
+        pg_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
+        pg_hook.run("CREATE SCHEMA IF NOT EXISTS bronze;")
 
-def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
-    """Extract Salesforce object data directly to PostgreSQL."""
+    @task(executor_config=executor_config)
+    def extract_salesforce_to_postgres(sf_object: str, table_name: str, **context):
+        """Extract Salesforce object data directly to PostgreSQL."""
+        import json
 
-    # Import providers at runtime (available in worker pod)
-    from airflow.providers.postgres.hooks.postgres import PostgresHook
-    from airflow.providers.salesforce.hooks.salesforce import SalesforceHook
-    import pandas as pd
+        import pandas as pd
+        from airflow.providers.postgres.hooks.postgres import PostgresHook
+        from airflow.providers.salesforce.hooks.salesforce import SalesforceHook
 
-    # Access environment variables (injected into pod via executor_config)
-    postgres_host = os.getenv("POSTGRES_HOST")
-    postgres_database = os.getenv("POSTGRES_DATABASE")
-    postgres_user = os.getenv("POSTGRES_USER")
-    postgres_password = os.getenv("POSTGRES_PASSWORD")
-    postgres_port = int(os.getenv("POSTGRES_PORT", "5432"))
+        sf_hook = SalesforceHook(salesforce_conn_id=salesforce_conn_id)
+        pg_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
 
-    salesforce_consumer_key = os.getenv("SALESFORCE_CONSUMER_KEY")
-    salesforce_consumer_secret = os.getenv("SALESFORCE_CONSUMER_SECRET")
-    salesforce_domain = os.getenv("SALESFORCE_DOMAIN", "login")
+        # Query Salesforce
+        sf_conn = sf_hook.get_conn()
+        query = f"SELECT * FROM {sf_object}"
+        result = sf_conn.query_all(query)
 
-    # Get hooks using OAuth credentials
-    sf_hook = SalesforceHook(
-        consumer_key=salesforce_consumer_key,
-        consumer_secret=salesforce_consumer_secret,
-        domain=salesforce_domain,
-    )
-    pg_hook = PostgresHook(
-        host=postgres_host,
-        database=postgres_database,
-        login=postgres_user,
-        password=postgres_password,
-        port=postgres_port,
-    )
+        if not result["records"]:
+            print(f"No records found for {sf_object}")
+            return
 
-    # Query Salesforce
-    sf_conn = sf_hook.get_conn()
-    query = f"SELECT * FROM {sf_object}"
-    result = sf_conn.query_all(query)
+        # Process records
+        records = []
+        for record in result["records"]:
+            # Remove Salesforce metadata
+            record.pop("attributes", None)
+            # Convert None values and handle nested objects
+            clean_record = {}
+            for key, value in record.items():
+                if isinstance(value, dict):
+                    clean_record[key] = json.dumps(value)
+                else:
+                    clean_record[key] = value
+            records.append(clean_record)
 
-    if not result["records"]:
-        print(f"No records found for {sf_object}")
-        return
+        # Convert to DataFrame
+        df = pd.DataFrame(records)
 
-    # Process records
-    records = []
-    for record in result["records"]:
-        # Remove Salesforce metadata
-        record.pop("attributes", None)
-        # Convert None values and handle nested objects
-        clean_record = {}
-        for key, value in record.items():
-            if isinstance(value, dict):
-                clean_record[key] = json.dumps(value)
+        # Add audit columns
+        df["extracted_at"] = datetime.now(timezone.utc)
+        df["dag_run_id"] = context["dag_run"].run_id
+
+        # Generate CREATE TABLE statement
+        columns_sql = []
+        for col in df.columns:
+            if col in ["extracted_at"]:
+                columns_sql.append(f'"{col}" TIMESTAMP WITH TIME ZONE')
+            elif col in ["dag_run_id"]:
+                columns_sql.append(f'"{col}" VARCHAR(255)')
             else:
-                clean_record[key] = value
-        records.append(clean_record)
+                columns_sql.append(f'"{col}" TEXT')
 
-    # Convert to DataFrame
-    df = pd.DataFrame(records)
+        create_table_sql = f"""
+        CREATE TABLE IF NOT EXISTS bronze.{table_name} (
+            {", ".join(columns_sql)}
+        );
+        """
 
-    # Add audit columns
-    df["extracted_at"] = datetime.utcnow()
-    df["dag_run_id"] = context["dag_run"].run_id
+        # Execute CREATE TABLE
+        pg_hook.run(create_table_sql)
 
-    # Generate CREATE TABLE statement
-    columns_sql = []
-    for col in df.columns:
-        if col in ["extracted_at"]:
-            columns_sql.append(f'"{col}" TIMESTAMP WITH TIME ZONE')
-        elif col in ["dag_run_id"]:
-            columns_sql.append(f'"{col}" VARCHAR(255)')
-        else:
-            columns_sql.append(f'"{col}" TEXT')
+        # Insert data
+        df.to_sql(
+            name=table_name,
+            con=pg_hook.get_sqlalchemy_engine(),
+            schema="bronze",
+            if_exists="append",
+            index=False,
+            method="multi",
+        )
 
-    create_table_sql = f"""
-    CREATE TABLE IF NOT EXISTS bronze.{table_name} (
-        {", ".join(columns_sql)}
-    );
-    """
+        print(f"Successfully loaded {len(df)} records to bronze.{table_name}")
 
-    # Execute CREATE TABLE
-    pg_hook.run(create_table_sql)
+    # Wire dependencies: schema first, then parallel extractions
+    schema = create_bronze_schema()
+    extract_accounts = extract_salesforce_to_postgres.override(
+        task_id="extract_accounts"
+    )(sf_object="Account", table_name="accounts")
+    extract_opportunities = extract_salesforce_to_postgres.override(
+        task_id="extract_opportunities"
+    )(sf_object="Opportunity", table_name="opportunities")
+    extract_contacts = extract_salesforce_to_postgres.override(
+        task_id="extract_contacts"
+    )(sf_object="Contact", table_name="contacts")
 
-    # Insert data
-    df.to_sql(
-        name=table_name,
-        con=pg_hook.get_sqlalchemy_engine(),
-        schema="bronze",
-        if_exists="append",
-        index=False,
-        method="multi",
-    )
-
-    print(f"Successfully loaded {len(df)} records to bronze.{table_name}")
+    schema >> [extract_accounts, extract_opportunities, extract_contacts]
 
 
-# Create bronze schema
-def create_bronze_schema():
-    """Create bronze schema in PostgreSQL."""
-    # Import provider at runtime (available in worker pod)
-    from airflow.providers.postgres.hooks.postgres import PostgresHook
-
-    # Access environment variables (injected into pod via executor_config)
-    postgres_host = os.getenv("POSTGRES_HOST")
-    postgres_database = os.getenv("POSTGRES_DATABASE")
-    postgres_user = os.getenv("POSTGRES_USER")
-    postgres_password = os.getenv("POSTGRES_PASSWORD")
-    postgres_port = int(os.getenv("POSTGRES_PORT", "5432"))
-
-    pg_hook = PostgresHook(
-        host=postgres_host,
-        database=postgres_database,
-        login=postgres_user,
-        password=postgres_password,
-        port=postgres_port,
-    )
-    pg_hook.run("CREATE SCHEMA IF NOT EXISTS bronze;")
-
-
-create_schema_task = PythonOperator(
-    task_id="create_bronze_schema",
-    python_callable=create_bronze_schema,
-    dag=dag,
-)
-
-# Extract Accounts
-extract_accounts_task = PythonOperator(
-    task_id="extract_accounts",
-    python_callable=extract_salesforce_to_postgres,
-    op_kwargs={"sf_object": "Account", "table_name": "accounts"},
-    dag=dag,
-)
-
-# Extract Opportunities
-extract_opportunities_task = PythonOperator(
-    task_id="extract_opportunities",
-    python_callable=extract_salesforce_to_postgres,
-    op_kwargs={"sf_object": "Opportunity", "table_name": "opportunities"},
-    dag=dag,
-)
-
-# Extract Contacts
-extract_contacts_task = PythonOperator(
-    task_id="extract_contacts",
-    python_callable=extract_salesforce_to_postgres,
-    op_kwargs={"sf_object": "Contact", "table_name": "contacts"},
-    dag=dag,
-)
-
-# Set dependencies
-create_schema_task >> [
-    extract_accounts_task,
-    extract_opportunities_task,
-    extract_contacts_task,
-]
+salesforce_extraction()

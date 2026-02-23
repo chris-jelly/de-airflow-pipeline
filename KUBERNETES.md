@@ -87,7 +87,7 @@ images:
   airflow:
     # Core components use official Airflow image
     repository: apache/airflow
-    tag: 2.8.1-python3.11
+    tag: 3.1.5-python3.13
     pullPolicy: IfNotPresent
 
 # For private repos (needed to pull your custom DAG images)
@@ -111,81 +111,66 @@ env: []
 
 Each DAG specifies **both** its container image **and** secrets via `executor_config`. This ensures secrets are only available to the specific pods that need them.
 
-Example from `salesforce_extraction_dag.py`:
+#### AIRFLOW_CONN_* Pod-Level Secret Pattern (ADR-002)
+
+DAGs use Airflow's `conn_id`-based hooks (e.g., `PostgresHook(postgres_conn_id=...)`) while keeping secrets isolated to executor pods. The connection is defined via `AIRFLOW_CONN_*` environment variables mounted from Kubernetes secrets:
 
 ```python
-# KubernetesExecutor configuration - specify custom image AND secrets for this DAG
-# SECURITY: Secrets are mounted ONLY in executor pods for this DAG, not globally
-executor_config = {
-    "pod_override": {
-        "spec": {
-            "containers": [
-                {
-                    "name": "base",
-                    "image": "ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
-                    # Mount secrets as environment variables ONLY for this DAG's pods
-                    "env": [
-                        {
-                            "name": "SALESFORCE_USERNAME",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "salesforce-credentials",
-                                    "key": "username"
-                                }
-                            }
-                        },
-                        {
-                            "name": "SALESFORCE_PASSWORD",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "salesforce-credentials",
-                                    "key": "password"
-                                }
-                            }
-                        },
-                        {
-                            "name": "SALESFORCE_SECURITY_TOKEN",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "salesforce-credentials",
-                                    "key": "security_token"
-                                }
-                            }
-                        },
-                        {
-                            "name": "SALESFORCE_DOMAIN",
-                            "value": "login"
-                        },
-                        # PostgreSQL credentials
-                        {
-                            "name": "POSTGRES_HOST",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": "postgres-credentials",
-                                    "key": "host"
-                                }
-                            }
-                        },
-                        # ... other PostgreSQL env vars ...
-                    ]
-                }
-            ]
-        }
-    }
-}
+from kubernetes.client import models as k8s
 
-default_args = {
-    'owner': 'data-team',
-    # ... other args ...
-    'executor_config': executor_config,  # Apply to all tasks in this DAG
+executor_config = {
+    "pod_override": k8s.V1Pod(
+        spec=k8s.V1PodSpec(
+            containers=[
+                k8s.V1Container(
+                    name="base",
+                    image="ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
+                    env=[
+                        # Postgres connection URI from K8s secret
+                        k8s.V1EnvVar(
+                            name="AIRFLOW_CONN_WAREHOUSE_POSTGRES",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="warehouse-postgres-conn",
+                                    key="AIRFLOW_CONN_WAREHOUSE_POSTGRES",
+                                )
+                            ),
+                        ),
+                        # Salesforce connection JSON from K8s secret
+                        k8s.V1EnvVar(
+                            name="AIRFLOW_CONN_SALESFORCE",
+                            value_from=k8s.V1EnvVarSource(
+                                secret_key_ref=k8s.V1SecretKeySelector(
+                                    name="salesforce-conn",
+                                    key="AIRFLOW_CONN_SALESFORCE",
+                                )
+                            ),
+                        ),
+                    ],
+                )
+            ]
+        )
+    )
 }
 ```
+
+**How it works:**
+1. Airflow reads `AIRFLOW_CONN_*` env vars to populate its connection registry at startup
+2. DAG code uses `PostgresHook(postgres_conn_id="warehouse_postgres_dev")` — the standard API
+3. The env var is only present in executor pods, not in scheduler/webserver (ADR-002)
+
+**Required Kubernetes secret formats:**
+- **PostgreSQL** (URI format): `postgresql://user:pass@host:5432/dbname`
+- **Salesforce** (JSON format): `{"conn_type":"salesforce","extra":{"consumer_key":"...","private_key":"...","domain":"login"}}`
+
+**Note:** The Kubernetes secrets themselves are managed in the homelab repo (out of scope for this pipeline repo). The DAG code only references connection IDs.
 
 **Benefits of this approach:**
 1. **Least Privilege**: Scheduler/webserver don't get data credentials
 2. **Isolation**: Each DAG only gets its own secrets
 3. **Auditable**: Clear which DAG accesses which credentials
 4. **Secure**: Secrets never in code, logs, or Airflow UI
+5. **Standard API**: Uses Airflow's native connection system with `conn_id` hooks
 
 ### Secret Management with External Secrets Operator
 
@@ -259,20 +244,16 @@ The container uses UV for dependency management, which provides:
 
 ### Environment Variables
 
-Environment variables are **mounted per-pod** via `executor_config` in each DAG, not globally.
+Connection credentials are **mounted per-pod** via `executor_config` using `AIRFLOW_CONN_*` environment variables, not globally. Each DAG only gets the connections it needs.
 
-**For Salesforce DAG (`salesforce_extraction_dag.py`):**
-- `SALESFORCE_USERNAME` - Salesforce username (from secret)
-- `SALESFORCE_PASSWORD` - Salesforce password (from secret)
-- `SALESFORCE_SECURITY_TOKEN` - Salesforce security token (from secret)
-- `SALESFORCE_DOMAIN` - Salesforce domain (default: 'login')
-- `POSTGRES_HOST` - PostgreSQL host (from secret)
-- `POSTGRES_DATABASE` - PostgreSQL database name (from secret)
-- `POSTGRES_USER` - PostgreSQL username (from secret)
-- `POSTGRES_PASSWORD` - PostgreSQL password (from secret)
-- `POSTGRES_PORT` - PostgreSQL port (default: 5432)
+**Salesforce DAG (`salesforce_extraction_dag.py`):**
+- `AIRFLOW_CONN_WAREHOUSE_POSTGRES` - PostgreSQL connection URI (from K8s secret `warehouse-postgres-conn`)
+- `AIRFLOW_CONN_SALESFORCE` - Salesforce connection JSON (from K8s secret `salesforce-conn`)
 
-These are defined in the DAG's `executor_config` and only available to that DAG's executor pods.
+**Postgres Ping DAG (`postgres_ping_dag.py`):**
+- `AIRFLOW_CONN_WAREHOUSE_POSTGRES` - PostgreSQL connection URI (from K8s secret `warehouse-postgres-conn`)
+
+These are defined in each DAG's `executor_config` and only available to that DAG's executor pods. The scheduler and webserver do not have access to these variables.
 
 ## Deployment Workflow
 

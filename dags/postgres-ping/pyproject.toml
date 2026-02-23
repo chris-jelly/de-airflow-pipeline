@@ -1,0 +1,22 @@
+# Minimal project config for testing only — this DAG runs on the base Airflow image
+# and does NOT have its own Dockerfile or container build.
+[project]
+name = "de-airflow-pipeline-postgres-ping"
+version = "0.1.0"
+description = "Postgres connectivity health-check DAG (tests only)"
+requires-python = ">=3.13"
+dependencies = [
+    "apache-airflow>=3.1.5",
+    "apache-airflow-providers-postgres>=6.5",
+    "apache-airflow-providers-cncf-kubernetes>=9.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.11",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
