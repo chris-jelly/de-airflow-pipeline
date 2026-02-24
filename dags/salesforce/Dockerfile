@@ -5,7 +5,7 @@ FROM apache/airflow:3.1.5-python3.13
 USER root
 
 # Install UV
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.7.12 /uv /usr/local/bin/uv
 
 # Create necessary directories
 RUN mkdir -p /opt/airflow/dags
@@ -16,12 +16,13 @@ WORKDIR /opt/airflow
 # Copy this DAG's pyproject.toml
 COPY --chown=airflow:root dags/salesforce/pyproject.toml ./pyproject.toml
 
-# Install dependencies using UV as root (--system requires root permissions)
-# This image only contains dependencies needed for Salesforce extraction
-RUN uv pip install --system --no-cache .
-
-# Switch to airflow user for runtime
+# Switch to airflow user so dependencies install into
+# /home/airflow/.local/lib/python3.13/site-packages/ — the only
+# site-packages directory on sys.path in the base Airflow image.
 USER airflow
+
+# Install dependencies (no --system: installs into user site-packages)
+RUN uv pip install --no-cache .
 
 # Copy ALL DAGs (scheduler needs to discover all DAG files)
 COPY --chown=airflow:root dags/ /opt/airflow/dags/

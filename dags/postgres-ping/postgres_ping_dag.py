@@ -10,7 +10,7 @@ Runs on the base apache/airflow image — no custom container required.
 
 from datetime import datetime, timedelta
 
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 from kubernetes.client import models as k8s
 
 # Connection IDs — single environment, no suffix (see ADR: consolidated dev/prod)

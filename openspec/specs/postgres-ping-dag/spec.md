@@ -21,12 +21,12 @@ The system SHALL provide a DAG named `postgres_ping` that validates Postgres dat
 
 ### Requirement: TaskFlow API pattern
 
-The DAG SHALL use the Airflow TaskFlow API (`@dag` and `@task` decorators) exclusively. It SHALL NOT use `PythonOperator` or other classic operator patterns.
+The DAG SHALL use the Airflow TaskFlow API (`@dag` and `@task` decorators) imported from `airflow.sdk`. It SHALL NOT use `PythonOperator` or other classic operator patterns.
 
 #### Scenario: DAG definition uses decorators
 
 - **WHEN** the DAG file is inspected
-- **THEN** the DAG SHALL be defined with `@dag` decorator and all tasks SHALL be defined with `@task` decorators
+- **THEN** the DAG SHALL be defined with `@dag` decorator and all tasks SHALL be defined with `@task` decorators, imported from `airflow.sdk`
 
 ### Requirement: No custom container image
 

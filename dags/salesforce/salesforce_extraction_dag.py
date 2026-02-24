@@ -12,7 +12,7 @@ Uses:
 
 from datetime import datetime, timedelta, timezone
 
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 from kubernetes.client import models as k8s
 
 # Connection IDs — single environment, no suffix (see ADR: consolidated dev/prod)

@@ -73,7 +73,7 @@ Provider hooks and heavy libraries (`pandas`, `SalesforceHook`, `PostgresHook`) 
 #### Scenario: Module-level imports are lightweight
 
 - **WHEN** the scheduler parses the DAG file at module level
-- **THEN** only `airflow` core imports and `kubernetes.client.models` SHALL be imported; provider hooks and `pandas` SHALL NOT be imported at the top level
+- **THEN** only `airflow.sdk`, `datetime`, and `kubernetes.client.models` SHALL be imported; provider hooks and `pandas` SHALL NOT be imported at the top level
 
 ### Requirement: Extraction logic unchanged
 
