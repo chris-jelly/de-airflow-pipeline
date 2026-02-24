@@ -41,7 +41,9 @@ class TestPostgresPingDag:
 
         dag = postgres_ping()
         ping_task = dag.get_task("ping")
-        assert "pod_override" in ping_task.executor_config
-        pod = ping_task.executor_config["pod_override"]
+        config = ping_task.executor_config
+        assert config is not None, "ping task: executor_config is None"
+        assert "pod_override" in config
+        pod = config["pod_override"]
         env_names = {e.name for e in pod.spec.containers[0].env}
         assert "AIRFLOW_CONN_WAREHOUSE_POSTGRES" in env_names

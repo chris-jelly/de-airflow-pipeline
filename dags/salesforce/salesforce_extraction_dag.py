@@ -34,6 +34,7 @@ executor_config = {
                 k8s.V1Container(
                     name="base",
                     image="ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
+                    image_pull_policy="Always",
                     env=[
                         k8s.V1EnvVar(
                             name="AIRFLOW_CONN_WAREHOUSE_POSTGRES",

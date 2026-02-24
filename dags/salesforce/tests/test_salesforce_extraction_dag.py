@@ -48,8 +48,26 @@ class TestSalesforceExtractionDag:
         dag = salesforce_extraction()
 
         for task in dag.tasks:
-            assert "pod_override" in task.executor_config
-            pod = task.executor_config["pod_override"]
+            config = task.executor_config
+            assert config is not None, f"Task {task.task_id}: executor_config is None"
+            assert "pod_override" in config
+            pod = config["pod_override"]
             env_names = {e.name for e in pod.spec.containers[0].env}
             assert "AIRFLOW_CONN_WAREHOUSE_POSTGRES" in env_names
             assert "AIRFLOW_CONN_SALESFORCE" in env_names
+
+    def test_image_pull_policy_always(self):
+        """Verify executor pods use imagePullPolicy=Always to pick up new images."""
+        from salesforce_extraction_dag import salesforce_extraction
+
+        dag = salesforce_extraction()
+
+        for task in dag.tasks:
+            config = task.executor_config
+            assert config is not None, f"Task {task.task_id}: executor_config is None"
+            pod = config["pod_override"]
+            container = pod.spec.containers[0]
+            assert container.image_pull_policy == "Always", (
+                f"Task {task.task_id}: expected imagePullPolicy=Always, "
+                f"got {container.image_pull_policy}"
+            )
