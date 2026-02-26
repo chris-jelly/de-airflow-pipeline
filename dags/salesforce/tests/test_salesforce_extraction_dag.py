@@ -1,5 +1,72 @@
 """Tests for the Salesforce extraction DAG (TaskFlow API)."""
 
+from datetime import datetime, timezone
+
+
+def test_curated_fields_include_id_and_systemmodstamp():
+    """Verify each object field list includes required incremental keys."""
+    from salesforce_extraction_dag import CURATED_FIELDS
+
+    for sf_object, fields in CURATED_FIELDS.items():
+        assert "Id" in fields, f"{sf_object} missing Id"
+        assert "SystemModstamp" in fields, f"{sf_object} missing SystemModstamp"
+
+
+def test_query_uses_explicit_fields_not_wildcard():
+    """Verify SOQL uses explicit curated fields and not SELECT *."""
+    from salesforce_extraction_dag import CURATED_FIELDS, build_incremental_query
+
+    for sf_object, fields in CURATED_FIELDS.items():
+        query = build_incremental_query(sf_object, watermark=None)
+        assert "SELECT *" not in query
+        assert query.startswith(f"SELECT {', '.join(fields)} FROM {sf_object}")
+
+
+def test_query_applies_watermark_and_deterministic_ordering():
+    """Verify incremental query contains watermark filter and deterministic ordering."""
+    from salesforce_extraction_dag import build_incremental_query
+
+    watermark = datetime(2026, 2, 26, 12, 0, tzinfo=timezone.utc)
+    query = build_incremental_query("Account", watermark=watermark)
+
+    assert "WHERE SystemModstamp >" in query
+    assert query.endswith("ORDER BY SystemModstamp, Id")
+
+
+def test_next_watermark_bootstrap_and_advancement_rules():
+    """Verify watermark behavior for bootstrap, no-op, and advance cases."""
+    from salesforce_extraction_dag import next_watermark
+
+    now = datetime(2026, 2, 26, 13, 0, tzinfo=timezone.utc)
+    existing = datetime(2026, 2, 25, 13, 0, tzinfo=timezone.utc)
+
+    bootstrap_value = next_watermark(current=None, records=[], now_utc=now)
+    assert bootstrap_value == now
+
+    unchanged_value = next_watermark(current=existing, records=[], now_utc=now)
+    assert unchanged_value == existing
+
+    advanced_value = next_watermark(
+        current=existing,
+        records=[
+            {"SystemModstamp": "2026-02-26T13:10:00.000+0000"},
+            {"SystemModstamp": "2026-02-26T13:20:00.000+0000"},
+        ],
+        now_utc=now,
+    )
+    assert advanced_value == datetime(2026, 2, 26, 13, 20, tzinfo=timezone.utc)
+
+
+def test_delete_strategy_remains_out_of_scope():
+    """Verify DAG module does not implement Salesforce delete-replication APIs."""
+    import inspect
+
+    import salesforce_extraction_dag
+
+    source = inspect.getsource(salesforce_extraction_dag)
+    assert "getDeleted" not in source
+    assert "getUpdated" not in source
+
 
 class TestSalesforceExtractionDag:
     """Test suite for salesforce_extraction DAG."""

@@ -292,6 +292,18 @@ kubectl delete -f manifests/postgres-target.yaml
 kubectl apply -f manifests/postgres-target.yaml
 ```
 
+#### Salesforce incremental extract limitations
+
+The Salesforce extraction DAG now uses curated-field incremental pulls based on
+`SystemModstamp` with per-object watermarks.
+
+Current scope limits:
+- Inserts and updates are ingested incrementally.
+- Hard delete propagation is not implemented in this change.
+
+Follow-up change reference:
+- `openspec/changes/salesforce-incremental-watermark-extract`
+
 ## Configuration Files
 
 | File | Purpose |
