@@ -22,6 +22,62 @@ def test_query_uses_explicit_fields_not_wildcard():
         assert query.startswith(f"SELECT {', '.join(fields)} FROM {sf_object}")
 
 
+def test_query_uses_schema_compatible_selected_fields():
+    """Verify query can be built from schema-compatible selected fields."""
+    from salesforce_extraction_dag import build_incremental_query_with_fields
+
+    selected_fields = ["Id", "AccountId", "Name", "SystemModstamp"]
+    query = build_incremental_query_with_fields(
+        sf_object="Opportunity",
+        selected_fields=selected_fields,
+        watermark=None,
+    )
+
+    assert "SELECT *" not in query
+    assert query.startswith(
+        "SELECT Id, AccountId, Name, SystemModstamp FROM Opportunity"
+    )
+
+
+def test_select_schema_compatible_fields_skips_missing_optional_fields():
+    """Verify optional curated fields are skipped when unavailable in org schema."""
+    from salesforce_extraction_dag import select_schema_compatible_fields
+
+    available_fields = {
+        "Id",
+        "AccountId",
+        "Name",
+        "StageName",
+        "Amount",
+        "SystemModstamp",
+    }
+
+    selected, skipped = select_schema_compatible_fields(
+        sf_object="Opportunity",
+        available_fields=available_fields,
+    )
+
+    assert "CurrencyIsoCode" in skipped
+    assert "CurrencyIsoCode" not in selected
+    assert "Id" in selected
+    assert "SystemModstamp" in selected
+
+
+def test_select_schema_compatible_fields_fails_when_required_field_missing():
+    """Verify required tracking fields are validated after compatibility filtering."""
+    import pytest
+
+    from salesforce_extraction_dag import select_schema_compatible_fields
+
+    available_fields = {"Id", "Name"}
+
+    with pytest.raises(ValueError, match="missing required fields"):
+        select_schema_compatible_fields(
+            sf_object="Opportunity",
+            available_fields=available_fields,
+        )
+
+
 def test_query_applies_watermark_and_deterministic_ordering():
     """Verify incremental query contains watermark filter and deterministic ordering."""
     from salesforce_extraction_dag import build_incremental_query

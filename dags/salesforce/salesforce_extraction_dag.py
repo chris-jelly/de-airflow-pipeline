@@ -11,6 +11,7 @@ Uses:
 """
 
 from datetime import datetime, timedelta, timezone
+import logging
 
 from airflow.sdk import dag, task
 from kubernetes.client import models as k8s
@@ -139,7 +140,20 @@ def sf_datetime_literal(value: datetime) -> str:
 def build_incremental_query(sf_object: str, watermark: datetime | None) -> str:
     """Build deterministic incremental SOQL query from curated fields."""
     fields = CURATED_FIELDS[sf_object]
-    query = f"SELECT {', '.join(fields)} FROM {sf_object}"
+    return build_incremental_query_with_fields(
+        sf_object=sf_object,
+        selected_fields=fields,
+        watermark=watermark,
+    )
+
+
+def build_incremental_query_with_fields(
+    sf_object: str,
+    selected_fields: list[str],
+    watermark: datetime | None,
+) -> str:
+    """Build deterministic incremental SOQL query from selected fields."""
+    query = f"SELECT {', '.join(selected_fields)} FROM {sf_object}"
 
     incremental_start = get_incremental_start(watermark)
     if incremental_start is not None:
@@ -147,6 +161,32 @@ def build_incremental_query(sf_object: str, watermark: datetime | None) -> str:
 
     query += " ORDER BY SystemModstamp, Id"
     return query
+
+
+def get_available_object_fields(sf_conn, sf_object: str) -> set[str]:
+    """Return available field names for a Salesforce object via describe metadata."""
+    describe = getattr(sf_conn, sf_object).describe()
+    return {field["name"] for field in describe.get("fields", []) if "name" in field}
+
+
+def select_schema_compatible_fields(
+    sf_object: str,
+    available_fields: set[str],
+    required_fields: tuple[str, str] = ("Id", "SystemModstamp"),
+) -> tuple[list[str], list[str]]:
+    """Select schema-compatible curated fields while preserving curated order."""
+    curated_fields = CURATED_FIELDS[sf_object]
+    selected = [field for field in curated_fields if field in available_fields]
+    skipped = [field for field in curated_fields if field not in available_fields]
+
+    missing_required = [field for field in required_fields if field not in selected]
+    if missing_required:
+        missing_str = ", ".join(missing_required)
+        raise ValueError(
+            f"{sf_object} missing required fields after schema filtering: {missing_str}"
+        )
+
+    return selected, skipped
 
 
 def parse_salesforce_datetime(value: str) -> datetime:
@@ -269,6 +309,7 @@ def salesforce_extraction():
 
         sf_hook = SalesforceHook(salesforce_conn_id=salesforce_conn_id)
         pg_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
+        logger = logging.getLogger(__name__)
 
         def get_watermark(sf_object: str) -> datetime | None:
             records = pg_hook.get_records(
@@ -299,7 +340,28 @@ def salesforce_extraction():
         # Query Salesforce incrementally
         sf_conn = sf_hook.get_conn()
         current_watermark = get_watermark(sf_object)
-        query = build_incremental_query(sf_object, current_watermark)
+        available_fields = get_available_object_fields(sf_conn, sf_object)
+        selected_fields, skipped_fields = select_schema_compatible_fields(
+            sf_object=sf_object,
+            available_fields=available_fields,
+        )
+        if skipped_fields:
+            logger.warning(
+                "Skipping unavailable curated Salesforce fields for %s: %s",
+                sf_object,
+                ", ".join(skipped_fields),
+            )
+        logger.info(
+            "Using schema-compatible curated Salesforce fields for %s: %s",
+            sf_object,
+            ", ".join(selected_fields),
+        )
+
+        query = build_incremental_query_with_fields(
+            sf_object=sf_object,
+            selected_fields=selected_fields,
+            watermark=current_watermark,
+        )
         result = sf_conn.query_all(query)
 
         records = result["records"]
