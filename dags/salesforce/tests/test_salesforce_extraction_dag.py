@@ -133,7 +133,7 @@ class TestSalesforceExtractionDag:
 
         dag = salesforce_extraction()
         expected_task_ids = {
-            "create_bronze_schema",
+            "create_raw_salesforce_schema",
             "extract_accounts",
             "extract_opportunities",
             "extract_contacts",
@@ -148,21 +148,21 @@ class TestSalesforceExtractionDag:
 
         dag = salesforce_extraction()
 
-        create_schema = dag.get_task("create_bronze_schema")
+        create_schema = dag.get_task("create_raw_salesforce_schema")
         extract_accounts = dag.get_task("extract_accounts")
         extract_opportunities = dag.get_task("extract_opportunities")
         extract_contacts = dag.get_task("extract_contacts")
 
-        # create_bronze_schema should have no upstream dependencies
+        # create_raw_salesforce_schema should have no upstream dependencies
         assert len(list(create_schema.upstream_list)) == 0
 
-        # All extract tasks should depend on create_bronze_schema
+        # All extract tasks should depend on create_raw_salesforce_schema
         def upstream_ids(t):
             return {u.task_id for u in t.upstream_list}
 
-        assert "create_bronze_schema" in upstream_ids(extract_accounts)
-        assert "create_bronze_schema" in upstream_ids(extract_opportunities)
-        assert "create_bronze_schema" in upstream_ids(extract_contacts)
+        assert "create_raw_salesforce_schema" in upstream_ids(extract_accounts)
+        assert "create_raw_salesforce_schema" in upstream_ids(extract_opportunities)
+        assert "create_raw_salesforce_schema" in upstream_ids(extract_contacts)
 
     def test_executor_config_present(self):
         """Verify tasks have executor_config with AIRFLOW_CONN_* env vars."""

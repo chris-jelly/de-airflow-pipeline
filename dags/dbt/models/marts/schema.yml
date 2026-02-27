@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: dim_salesforce_accounts
+    columns:
+      - name: account_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+          - unique:
+              config:
+                severity: error
+
+  - name: fct_salesforce_opportunities
+    columns:
+      - name: opportunity_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+          - unique:
+              config:
+                severity: error
+      - name: account_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_salesforce_accounts')
+                field: account_id
+              config:
+                severity: error
+
+  - name: opportunity_history_snapshot
+    columns:
+      - name: opportunity_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+      - name: snapshot_date
+        tests:
+          - not_null:
+              config:
+                severity: error

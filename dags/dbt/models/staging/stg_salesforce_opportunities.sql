@@ -1,0 +1,23 @@
+select
+    "Id" as opportunity_id,
+    "AccountId" as account_id,
+    "Name" as opportunity_name,
+    "StageName" as stage_name,
+    {{ safe_numeric('nullif("Amount", '''')') }} as amount,
+    {{ safe_numeric('nullif("Probability", '''')') }} as probability,
+    to_date(nullif("CloseDate", ''), 'YYYY-MM-DD') as close_date,
+    "Type" as opportunity_type,
+    "ForecastCategoryName" as forecast_category_name,
+    {{ safe_boolean('nullif("IsClosed", '''')') }} as is_closed,
+    {{ safe_boolean('nullif("IsWon", '''')') }} as is_won,
+    "LeadSource" as lead_source,
+    "NextStep" as next_step,
+    "OwnerId" as owner_id,
+    "CurrencyIsoCode" as currency_iso_code,
+    {{ safe_boolean('nullif("IsDeleted", '''')') }} as is_deleted,
+    nullif("CreatedDate", '')::timestamptz as created_at,
+    nullif("LastModifiedDate", '')::timestamptz as last_modified_at,
+    nullif("SystemModstamp", '')::timestamptz as systemmodstamp,
+    extracted_at,
+    dag_run_id
+from raw_salesforce.opportunities

@@ -33,7 +33,7 @@ echo ""
 
 # Step 3: Build and load images
 echo "=== Step 3/4: Building and loading DAG images ==="
-"$SCRIPT_DIR/image-load.sh"
+"$SCRIPT_DIR/image-load.sh" salesforce dbt
 echo ""
 
 # Step 4: Deploy Airflow
@@ -51,5 +51,5 @@ echo ""
 echo "Useful commands:"
 echo "  Check pods: kubectl get pods -n airflow"
 echo "  View scheduler logs: kubectl logs -n airflow -l component=scheduler --tail=50 -f"
-echo "  Rebuild DAG image: ./k3d/scripts/image-load.sh"
+echo "  Rebuild DAG images: ./k3d/scripts/image-load.sh salesforce dbt"
 echo "  Delete cluster: ./k3d/scripts/cluster-delete.sh"

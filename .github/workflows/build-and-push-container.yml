@@ -32,10 +32,9 @@ jobs:
           - name: salesforce
             dockerfile: dags/salesforce/Dockerfile
             description: "Salesforce extraction DAG dependencies"
-          # Add more images here as you create them:
-          # - name: dbt
-          #   dockerfile: dags/dbt/Dockerfile
-          #   description: "dbt transformation dependencies"
+          - name: dbt
+            dockerfile: dags/dbt/Dockerfile
+            description: "Salesforce dbt transformation DAG dependencies"
           # - name: api
           #   dockerfile: dags/api/Dockerfile
           #   description: "API extraction dependencies"

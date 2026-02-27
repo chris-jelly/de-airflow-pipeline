@@ -1,7 +1,7 @@
 """Salesforce to PostgreSQL extraction DAG.
 
 Extracts Account, Opportunity, and Contact objects from Salesforce
-and loads them into a PostgreSQL bronze schema.
+and loads them into a PostgreSQL raw_salesforce schema.
 
 Uses:
 - TaskFlow API (@dag / @task decorators)
@@ -12,6 +12,7 @@ Uses:
 
 from datetime import datetime, timedelta, timezone
 import logging
+import os
 
 from airflow.sdk import dag, task
 from kubernetes.client import models as k8s
@@ -234,7 +235,10 @@ executor_config = {
             containers=[
                 k8s.V1Container(
                     name="base",
-                    image="ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
+                    image=os.getenv(
+                        "SALESFORCE_DAG_IMAGE",
+                        "ghcr.io/chris-jelly/de-airflow-pipeline-salesforce:latest",
+                    ),
                     image_pull_policy="Always",
                     env=[
                         k8s.V1EnvVar(
@@ -265,7 +269,7 @@ executor_config = {
 
 @dag(
     dag_id="salesforce_extraction",
-    description="Extract Salesforce data to PostgreSQL bronze layer",
+    description="Extract Salesforce data to PostgreSQL raw_salesforce layer",
     schedule="@daily",
     start_date=datetime(2024, 1, 1),
     catchup=False,
@@ -280,17 +284,17 @@ executor_config = {
     },
 )
 def salesforce_extraction():
-    @task(task_id="create_bronze_schema", executor_config=executor_config)
-    def create_bronze_schema():
-        """Create bronze schema in PostgreSQL."""
+    @task(task_id="create_raw_salesforce_schema", executor_config=executor_config)
+    def create_raw_salesforce_schema():
+        """Create raw Salesforce schema in PostgreSQL."""
         from airflow.providers.postgres.hooks.postgres import PostgresHook
 
         pg_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
         pg_hook.run(
             """
-            CREATE SCHEMA IF NOT EXISTS bronze;
+            CREATE SCHEMA IF NOT EXISTS raw_salesforce;
 
-            CREATE TABLE IF NOT EXISTS bronze.salesforce_watermarks (
+            CREATE TABLE IF NOT EXISTS raw_salesforce.salesforce_watermarks (
                 sf_object VARCHAR(255) PRIMARY KEY,
                 last_systemmodstamp TIMESTAMP WITH TIME ZONE NOT NULL,
                 updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -315,7 +319,7 @@ def salesforce_extraction():
             records = pg_hook.get_records(
                 sql="""
                 SELECT last_systemmodstamp
-                FROM bronze.salesforce_watermarks
+                FROM raw_salesforce.salesforce_watermarks
                 WHERE sf_object = %s
                 """,
                 parameters=(sf_object,),
@@ -327,7 +331,7 @@ def salesforce_extraction():
         def upsert_watermark(sf_object: str, watermark: datetime) -> None:
             pg_hook.run(
                 sql="""
-                INSERT INTO bronze.salesforce_watermarks (sf_object, last_systemmodstamp, updated_at)
+                INSERT INTO raw_salesforce.salesforce_watermarks (sf_object, last_systemmodstamp, updated_at)
                 VALUES (%s, %s, NOW())
                 ON CONFLICT (sf_object)
                 DO UPDATE SET
@@ -383,7 +387,7 @@ def salesforce_extraction():
                 columns_sql.append(f'"{col}" TEXT')
 
         create_table_sql = f"""
-        CREATE TABLE IF NOT EXISTS bronze.{table_name} (
+        CREATE TABLE IF NOT EXISTS raw_salesforce.{table_name} (
             {", ".join(columns_sql)}
         );
         """
@@ -426,7 +430,7 @@ def salesforce_extraction():
         df.to_sql(
             name=stage_table,
             con=pg_hook.get_sqlalchemy_engine(),
-            schema="bronze",
+            schema="raw_salesforce",
             if_exists="replace",
             index=False,
             method="multi",
@@ -435,24 +439,24 @@ def salesforce_extraction():
         quoted_columns = ", ".join(f'"{col}"' for col in df.columns)
         pg_hook.run(
             f"""
-            DELETE FROM bronze.{table_name} AS target
-            USING bronze.{stage_table} AS stage
+            DELETE FROM raw_salesforce.{table_name} AS target
+            USING raw_salesforce.{stage_table} AS stage
             WHERE target."Id" = stage."Id";
 
-            INSERT INTO bronze.{table_name} ({quoted_columns})
+            INSERT INTO raw_salesforce.{table_name} ({quoted_columns})
             SELECT {quoted_columns}
-            FROM bronze.{stage_table};
+            FROM raw_salesforce.{stage_table};
 
-            DROP TABLE IF EXISTS bronze.{stage_table};
+            DROP TABLE IF EXISTS raw_salesforce.{stage_table};
             """
         )
 
         upsert_watermark(sf_object, planned_watermark)
 
-        print(f"Successfully loaded {len(df)} records to bronze.{table_name}")
+        print(f"Successfully loaded {len(df)} records to raw_salesforce.{table_name}")
 
     # Wire dependencies: schema first, then parallel extractions
-    schema = create_bronze_schema()
+    schema = create_raw_salesforce_schema()
     extract_accounts = extract_salesforce_to_postgres.override(
         task_id="extract_accounts"
     )(sf_object="Account", table_name="accounts")

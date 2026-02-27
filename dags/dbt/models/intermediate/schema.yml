@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: int_salesforce_current_accounts
+    columns:
+      - name: account_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+          - unique:
+              config:
+                severity: error
+      - name: systemmodstamp
+        tests:
+          - not_null:
+              config:
+                severity: error
+
+  - name: int_salesforce_current_contacts
+    columns:
+      - name: contact_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+          - unique:
+              config:
+                severity: error
+
+  - name: int_salesforce_current_opportunities
+    columns:
+      - name: opportunity_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+          - unique:
+              config:
+                severity: error
+      - name: account_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('int_salesforce_current_accounts')
+                field: account_id
+              config:
+                severity: error

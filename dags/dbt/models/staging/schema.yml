@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: stg_salesforce_accounts
+    columns:
+      - name: account_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+          - unique:
+              config:
+                severity: error
+      - name: account_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Customer - Direct', 'Customer - Channel', 'Prospect', 'Partner', 'Other']
+                quote: true
+              config:
+                severity: warn
+
+  - name: stg_salesforce_contacts
+    columns:
+      - name: contact_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+
+  - name: stg_salesforce_opportunities
+    columns:
+      - name: opportunity_id
+        tests:
+          - not_null:
+              config:
+                severity: error
+      - name: stage_name
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Prospecting', 'Qualification', 'Needs Analysis', 'Value Proposition', 'Id. Decision Makers', 'Proposal/Price Quote', 'Negotiation/Review', 'Closed Won', 'Closed Lost']
+                quote: true
+              config:
+                severity: warn

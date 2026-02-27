@@ -64,6 +64,11 @@ data:
 # Scheduler Configuration
 # ------------------------------------------------------------------------------
 scheduler:
+  extraEnv:
+    - name: SALESFORCE_DAG_IMAGE
+      value: k3d-registry.localhost:5111/de-airflow-pipeline-salesforce:local
+    - name: DBT_DAG_IMAGE
+      value: k3d-registry.localhost:5111/de-airflow-pipeline-dbt:local
   extraVolumes:
     - name: dags-local
       hostPath:
@@ -78,6 +83,11 @@ scheduler:
 # Triggerer Configuration
 # ------------------------------------------------------------------------------
 triggerer:
+  extraEnv:
+    - name: SALESFORCE_DAG_IMAGE
+      value: k3d-registry.localhost:5111/de-airflow-pipeline-salesforce:local
+    - name: DBT_DAG_IMAGE
+      value: k3d-registry.localhost:5111/de-airflow-pipeline-dbt:local
   extraVolumes:
     - name: dags-local
       hostPath:
@@ -95,6 +105,11 @@ triggerer:
 # k3d cluster must be configured to map port 30080 to the node.
 # (See k3d/cluster-config.yaml)
 webserver:
+  extraEnv:
+    - name: SALESFORCE_DAG_IMAGE
+      value: k3d-registry.localhost:5111/de-airflow-pipeline-salesforce:local
+    - name: DBT_DAG_IMAGE
+      value: k3d-registry.localhost:5111/de-airflow-pipeline-dbt:local
   extraVolumes:
     - name: dags-local
       hostPath:

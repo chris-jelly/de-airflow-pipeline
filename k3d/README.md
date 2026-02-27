@@ -99,10 +99,10 @@ For local development, use these PostgreSQL defaults:
 ### 3. Build and Load DAG Images
 
 ```bash
-./scripts/image-load.sh
+./scripts/image-load.sh salesforce dbt
 ```
 
-This builds the Salesforce DAG Docker image and pushes it to the local k3d registry.
+This builds the Salesforce extraction and Salesforce dbt DAG Docker images and pushes them to the local k3d registry.
 
 ### 4. Deploy Airflow
 
@@ -150,7 +150,7 @@ When you change Python dependencies or task code:
 
 ```bash
 cd k3d/scripts
-./image-load.sh
+./image-load.sh salesforce dbt
 ```
 
 This rebuilds and pushes the DAG image to the local registry. New DAG runs will use the updated image.
@@ -380,7 +380,7 @@ This ensures:
 ## Next Steps
 
 - Add more DAG types (follow the per-DAG pattern)
-- Integrate with dbt for silver/gold layers
+- Extend dbt marts for additional Salesforce entities
 - Add monitoring with Prometheus/Grafana
 - Configure email alerts
 

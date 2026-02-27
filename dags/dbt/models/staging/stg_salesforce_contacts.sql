@@ -1,0 +1,20 @@
+select
+    "Id" as contact_id,
+    "AccountId" as account_id,
+    "FirstName" as first_name,
+    "LastName" as last_name,
+    "Name" as full_name,
+    "Email" as email,
+    "Phone" as phone,
+    "MobilePhone" as mobile_phone,
+    "Title" as title,
+    "Department" as department,
+    "LeadSource" as lead_source,
+    "OwnerId" as owner_id,
+    {{ safe_boolean('nullif("IsDeleted", '''')') }} as is_deleted,
+    nullif("CreatedDate", '')::timestamptz as created_at,
+    nullif("LastModifiedDate", '')::timestamptz as last_modified_at,
+    nullif("SystemModstamp", '')::timestamptz as systemmodstamp,
+    extracted_at,
+    dag_run_id
+from raw_salesforce.contacts
