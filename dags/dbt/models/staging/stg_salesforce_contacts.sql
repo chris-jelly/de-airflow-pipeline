@@ -11,7 +11,7 @@ select
     "Department" as department,
     "LeadSource" as lead_source,
     "OwnerId" as owner_id,
-    {{ safe_boolean('nullif("IsDeleted", '''')') }} as is_deleted,
+    {{ safe_boolean('"IsDeleted"') }} as is_deleted,
     nullif("CreatedDate", '')::timestamptz as created_at,
     nullif("LastModifiedDate", '')::timestamptz as last_modified_at,
     nullif("SystemModstamp", '')::timestamptz as systemmodstamp,
