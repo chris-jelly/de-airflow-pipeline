@@ -16,6 +16,7 @@ from kubernetes.client import models as k8s
 postgres_conn_id = "warehouse_postgres"
 DBT_PROJECT_DIR = str(Path(__file__).resolve().parent)
 DBT_STATE_PIPELINE = "salesforce_dbt"
+DBT_RUNTIME_ROOT = "/tmp/dbt"
 
 logger = logging.getLogger(__name__)
 
@@ -76,9 +77,41 @@ def _build_dbt_env() -> dict[str, str]:
             "DBT_PORT": str(conn.port or 5432),
             "DBT_DBNAME": conn.schema,
             "DBT_PROFILES_DIR": DBT_PROJECT_DIR,
+            "DBT_TARGET_PATH": f"{DBT_RUNTIME_ROOT}/target",
+            "DBT_LOG_PATH": f"{DBT_RUNTIME_ROOT}/logs",
+            "DBT_PACKAGES_INSTALL_PATH": f"{DBT_RUNTIME_ROOT}/dbt_packages",
         }
     )
     return env
+
+
+def _run_dbt_command(command: list[str]) -> None:
+    """Execute dbt command with consistent runtime paths and logging."""
+    env = _build_dbt_env()
+    command_str = " ".join(command)
+    logger.info("Running dbt command: %s", command_str)
+
+    try:
+        result = subprocess.run(
+            command,
+            check=True,
+            cwd=DBT_PROJECT_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        logger.error("dbt command failed with exit code %s: %s", exc.returncode, command_str)
+        if exc.stdout:
+            logger.error("dbt stdout:\n%s", exc.stdout.strip())
+        if exc.stderr:
+            logger.error("dbt stderr:\n%s", exc.stderr.strip())
+        raise
+
+    if result.stdout:
+        logger.info("dbt stdout:\n%s", result.stdout.strip())
+    if result.stderr:
+        logger.warning("dbt stderr:\n%s", result.stderr.strip())
 
 
 @dag(
@@ -168,18 +201,14 @@ def salesforce_dbt_transformation():
     @task(task_id="dbt_build_salesforce", executor_config=executor_config)
     def dbt_build_salesforce() -> None:
         """Run dbt build for Salesforce staging/intermediate/marts models."""
-        env = _build_dbt_env()
         command = ["dbt", "build", "--select", "path:models/staging+ path:models/intermediate+ path:models/marts+"]
-        logger.info("Running dbt build command: %s", " ".join(command))
-        subprocess.run(command, check=True, cwd=DBT_PROJECT_DIR, env=env)
+        _run_dbt_command(command)
 
     @task(task_id="dbt_test_diagnostics", executor_config=executor_config)
     def dbt_test_diagnostics() -> None:
         """Run warning/info diagnostics separately for observability."""
-        env = _build_dbt_env()
         command = ["dbt", "test", "--select", "tag:warn tag:info"]
-        logger.info("Running dbt diagnostic command: %s", " ".join(command))
-        subprocess.run(command, check=True, cwd=DBT_PROJECT_DIR, env=env)
+        _run_dbt_command(command)
 
     @task(task_id="record_last_processed_marker", executor_config=executor_config)
     def record_last_processed_marker(**context) -> None:

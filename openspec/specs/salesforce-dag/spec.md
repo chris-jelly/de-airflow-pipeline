@@ -2,7 +2,7 @@
 
 ### Requirement: TaskFlow API migration
 
-The Salesforce extraction DAG SHALL use the Airflow TaskFlow API. The DAG SHALL be defined with the `@dag` decorator. All task functions (`create_bronze_schema`, `extract_accounts`, `extract_opportunities`, `extract_contacts`) SHALL be defined with `@task` decorators.
+The Salesforce extraction DAG SHALL use the Airflow TaskFlow API. The DAG SHALL be defined with the `@dag` decorator. All task functions (`create_raw_salesforce_schema`, `extract_accounts`, `extract_opportunities`, `extract_contacts`) SHALL be defined with `@task` decorators.
 
 #### Scenario: DAG uses TaskFlow decorators
 
@@ -12,12 +12,12 @@ The Salesforce extraction DAG SHALL use the Airflow TaskFlow API. The DAG SHALL 
 #### Scenario: Task dependencies preserved
 
 - **WHEN** the DAG is parsed
-- **THEN** `create_bronze_schema` SHALL have no upstream dependencies, and `extract_accounts`, `extract_opportunities`, and `extract_contacts` SHALL each depend on `create_bronze_schema`
+- **THEN** `create_raw_salesforce_schema` SHALL have no upstream dependencies, and `extract_accounts`, `extract_opportunities`, and `extract_contacts` SHALL each depend on `create_raw_salesforce_schema`
 
 #### Scenario: Task IDs unchanged
 
 - **WHEN** the DAG is parsed
-- **THEN** the task IDs SHALL remain `create_bronze_schema`, `extract_accounts`, `extract_opportunities`, and `extract_contacts`
+- **THEN** the task IDs SHALL remain `create_raw_salesforce_schema`, `extract_accounts`, `extract_opportunities`, and `extract_contacts`
 
 ### Requirement: Connection-based hook instantiation
 
@@ -77,12 +77,12 @@ Provider hooks and heavy libraries (`pandas`, `SalesforceHook`, `PostgresHook`) 
 
 ### Requirement: Extraction logic unchanged
 
-The Salesforce extraction logic SHALL use curated explicit field lists and watermark-based incremental queries by `SystemModstamp`, while continuing to extract `Account`, `Opportunity`, and `Contact` into bronze tables.
+The Salesforce extraction logic SHALL use curated explicit field lists and watermark-based incremental queries by `SystemModstamp`, while continuing to extract `Account`, `Opportunity`, and `Contact` into raw landing tables.
 
 #### Scenario: Same Salesforce objects extracted
 
 - **WHEN** the DAG executes
-- **THEN** it SHALL extract `Account`, `Opportunity`, and `Contact` objects to `bronze.accounts`, `bronze.opportunities`, and `bronze.contacts` tables respectively
+- **THEN** it SHALL extract `Account`, `Opportunity`, and `Contact` objects to `raw_salesforce.accounts`, `raw_salesforce.opportunities`, and `raw_salesforce.contacts` tables respectively
 
 #### Scenario: Incremental extraction query behavior
 
@@ -96,7 +96,7 @@ The Salesforce extraction logic SHALL use curated explicit field lists and water
 
 ### Requirement: Updated tests
 
-The test suite SHALL be updated to work with the TaskFlow API DAG structure while maintaining equivalent coverage for task IDs, task dependencies, and executor configuration.
+The test suite SHALL be updated to work with the renamed raw schema creation task and schema targets while maintaining equivalent coverage for task IDs, task dependencies, and executor configuration.
 
 #### Scenario: Tests validate TaskFlow DAG structure
 
