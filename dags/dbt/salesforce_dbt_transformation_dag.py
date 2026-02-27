@@ -7,13 +7,14 @@ staging, intermediate, and marts schemas.
 from datetime import datetime, timedelta
 import logging
 import os
+from pathlib import Path
 import subprocess
 
 from airflow.sdk import dag, task
 from kubernetes.client import models as k8s
 
 postgres_conn_id = "warehouse_postgres"
-DBT_PROJECT_DIR = "/opt/airflow/dags/dbt"
+DBT_PROJECT_DIR = str(Path(__file__).resolve().parent)
 DBT_STATE_PIPELINE = "salesforce_dbt"
 
 logger = logging.getLogger(__name__)
