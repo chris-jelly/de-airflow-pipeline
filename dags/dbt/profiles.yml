@@ -8,6 +8,9 @@ salesforce_transformations:
       password: "{{ env_var('DBT_PASSWORD') }}"
       port: "{{ env_var('DBT_PORT', '5432') | as_number }}"
       dbname: "{{ env_var('DBT_DBNAME') }}"
+      # Default schema is only used when a model does not set +schema.
+      # Salesforce models set +schema and are expected to land in canonical
+      # schemas: staging, intermediate, marts.
       schema: staging
       threads: 4
       connect_timeout: 10

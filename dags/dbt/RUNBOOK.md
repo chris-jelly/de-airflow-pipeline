@@ -10,6 +10,7 @@ This runbook covers the `salesforce_dbt_transformation` DAG and dbt project unde
 - `staging`: typed first-pass models from raw source text fields.
 - `intermediate`: current-state incremental upsert models keyed by Salesforce entity IDs.
 - `marts`: query-ready account/opportunity analytics models and lightweight opportunity history snapshots.
+- Prefixed modeled schemas (for example `staging_staging`, `staging_intermediate`, `staging_marts`) are non-canonical and should remain unused.
 
 ## Schedule and Freshness Gating
 
@@ -39,6 +40,21 @@ Expected outcomes:
 
 - `dbt parse` succeeds without graph compilation errors.
 - `dbt ls` returns Salesforce staging and marts model selection lists.
+
+Optional warehouse validation query:
+
+```sql
+select table_schema, count(*) as relation_count
+from information_schema.tables
+where table_schema in ('staging', 'intermediate', 'marts', 'staging_staging', 'staging_intermediate', 'staging_marts')
+group by table_schema
+order by table_schema;
+```
+
+Expected warehouse layout after successful canonical-schema runs:
+
+- Relations present in `staging`, `intermediate`, and `marts`.
+- No modeled relations populated in `staging_staging`, `staging_intermediate`, or `staging_marts`.
 
 ## Rollback Path
 

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Dedicated dbt transformation DAG
-The system SHALL provide a dedicated Airflow DAG that orchestrates dbt transformations for Salesforce raw landing tables and downstream modeled layers.
+The system SHALL provide a dedicated Airflow DAG that orchestrates dbt transformations for Salesforce raw landing tables and downstream modeled layers in canonical schemas.
 
 #### Scenario: DAG is discoverable and scoped to dbt transformation
 - **WHEN** Airflow parses DAG files
@@ -10,6 +10,10 @@ The system SHALL provide a dedicated Airflow DAG that orchestrates dbt transform
 #### Scenario: DAG executes dbt transformation workflow
 - **WHEN** the transformation DAG runs
 - **THEN** it SHALL execute dbt commands that build Salesforce transformation models and run configured validations
+
+#### Scenario: DAG builds canonical modeled schemas
+- **WHEN** the transformation DAG executes dbt model builds
+- **THEN** modeled outputs SHALL materialize into canonical schemas `staging`, `intermediate`, and `marts`
 
 ### Requirement: Independent scheduling with freshness gating
 The dbt transformation DAG SHALL be independently schedulable and SHALL skip transformation work when raw Salesforce data has not advanced since the last successful transformation run.
